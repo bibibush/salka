@@ -1,0 +1,127 @@
+# AGENTS.md
+
+## 에이전트 역할
+
+- 에이전트는 이 프로젝트에서 시니어 개발자 역할을 수행한다.
+- 구현, 설계 검토, 문서 보강 시 PDD와 본 문서의 제약을 기준으로 기술적 판단을 내린다.
+- 구조를 단순화한다는 이유로 백엔드 클린 아키텍처 또는 프론트엔드(Web/Mobile) FSD 패턴을 생략하지 않는다.
+- 아직 결정되지 않은 기술 선택은 임의로 확정하지 않고 사용자 확인을 거친다.
+
+## 프로젝트 기준 문서
+
+- 이 프로젝트의 현재 기준 문서는 `documents/pdd/pdd.md`이다.
+- 현재 단계에서는 애플리케이션 구현, 기술 스택 설치, 패키지 초기화, 의존성 설치를 수행하지 않는다.
+- 구현 작업은 사용자가 별도로 요청한 뒤에만 시작한다.
+- 구현을 시작할 때는 PDD의 Phase 1 MVP 범위를 우선 기준으로 삼는다.
+
+## 작업 원칙
+
+- 확실하지 않은 정보로 작업 방향을 결정해야 할 경우 임의로 판단하지 말고 사용자에게 선택지를 제시해 확인한다.
+- PDD의 "추후 결정 사항"에 해당하는 항목은 사용자의 명시적 결정 없이 확정하지 않는다.
+- 의료적 진단, 처방, 법적 판정처럼 보일 수 있는 표현은 피하고 참고용 판단 보조 도구라는 포지셔닝을 유지한다.
+- 강한 단정 표현("유해", "위험", "안전")은 제품 문구, 프롬프트, 응답 후처리 정책에서 금지한다.
+- MVP는 무상태(stateless), 사용자 인증 없음, 데이터 영구 저장 없음 원칙을 따른다.
+
+## 예정 아키텍처
+
+- 모노레포 구조는 PDD의 `cosmetics-analyzer/` 구조를 기준으로 한다.
+- Mobile은 React Native Expo 기반 FSD 패턴을 반드시 따른다(클린 아키텍처 미적용).
+- Web은 React + Vite 기반 FSD 패턴을 반드시 따르되 클린 아키텍처를 과도하게 적용하지 않는다.
+- Backend는 FastAPI 기반 클린 아키텍처 + DI 구조를 반드시 따른다.
+- 공유 타입, API 클라이언트, 디자인 토큰, Tailwind preset은 모노레포 패키지로 분리한다.
+- HTTP 클라이언트는 `ky`, API 클라이언트 타입 생성은 백엔드 OpenAPI 기반 `openapi-typescript`를 사용한다.
+- 구현 시 프론트엔드(Web/Mobile)의 FSD 레이어 경계와 백엔드의 클린 아키텍처 의존성 방향을 우회하지 않는다.
+
+## 구현 시 주의사항
+
+- 업로드 이미지는 메모리에서만 처리하고 디스크에 저장하지 않는다.
+- 분석 결과는 응답으로만 반환하고 서버에 저장하지 않는다.
+- 백엔드는 모든 분석 응답에 면책 문구를 부착해야 한다.
+- LLM/OCR/Barcode 외부 의존성은 Port 인터페이스를 통해서만 접근한다.
+- 초기 구현체는 Mock provider를 우선 제공한다.
+- API 오류 응답은 RFC 7807 형식(`application/problem+json`)을 따른다.
+- Phase 2 또는 Phase 3 기능은 사용자의 명시적 요청 없이 선행 구현하지 않는다.
+
+## 라운드별 개발 계획
+
+PDD의 Phase 1/2/3을 **독립적으로 완료·검증 가능한 라운드**로 분할한다. 에이전트는
+한 번에 한 라운드만 진행하고, 라운드를 시작하기 전에 선행 라운드의 완료 기준이
+충족되었는지 확인한다. 라운드를 마치면 본 문서의 상태 표시를 갱신한다.
+
+진행 규칙:
+- 라운드는 위에서 아래 순서로 진행하며, 사용자가 명시적으로 지정하면 해당 라운드부터 진행한다.
+- 한 라운드의 "완료 기준"을 모두 충족하기 전에는 다음 라운드를 시작하지 않는다.
+- 라운드 범위를 벗어나는 작업(특히 다음 Phase 기능)은 사용자 요청 없이 선행하지 않는다.
+- 상태 표기: `✅ 완료` / `🔜 다음` / `⏳ 대기`.
+
+### Phase 1 (MVP)
+
+#### R1 — 모노레포 골격 + 백엔드 API ✅ 완료
+- 범위: pnpm workspace + Turborepo 골격, `apps/api`(FastAPI 클린 아키텍처 + DI)
+- 산출물: 루트 설정 파일, `apps/api` 전체(domain/application/infrastructure/interfaces/di/core), Mock LLM/OCR 어댑터, `POST /analysis/by-ingredients-{text,image}`, `GET /health`, RFC 7807 오류, 면책 문구 부착, 단위/통합 테스트
+- 완료 기준: `uv run ruff check .`, `uv run mypy src`, `uv run pytest` 통과 / 서버 기동 후 3개 엔드포인트 정상 / `/openapi.json` 노출
+
+#### R2 — 프론트 공유 패키지 🔜 다음
+- 범위: 모노레포 공유 패키지 구성
+- 산출물: `packages/config-typescript`, `packages/config-eslint`(FSD 경계 강제용 `eslint-plugin-boundaries`/`steiger` 포함), `packages/ui-tokens`, `packages/config-tailwind`(RN/Web 공용 preset), `packages/shared-types`, `packages/api-client`(백엔드 OpenAPI → `openapi-typescript` 타입 생성 + `ky` 기반 wrapper)
+- 선행: R1
+- 완료 기준: `pnpm install` 성공 / `api-client` 타입이 `apps/api`의 `AnalysisResult` 스키마와 일치 / 공유 패키지가 lint·type-check 통과
+
+#### R3 — Web 앱 ⏳ 대기
+- 범위: `apps/web` (Vite + React 19, FSD 패턴, 클린 아키텍처 미적용)
+- 산출물: Tailwind v4(공용 preset), React Router v7, TanStack Query v5 + `ky`, Zustand, 이미지/텍스트 입력 → 분석 → 결과 화면, 면책 문구 표시, 결과는 메모리 store에만 보관
+- 선행: R2
+- 완료 기준: `pnpm --filter web build` 성공 / 로컬에서 백엔드 연동하여 텍스트·이미지 분석 결과 표시 / FSD 레이어 경계 lint 통과
+
+#### R4 — Mobile 앱 ⏳ 대기
+- 범위: `apps/mobile` (Expo SDK 54+, React Native, **FSD 패턴만** — 클린 아키텍처 미적용)
+- 산출물: expo-router, NativeWind v4(공용 preset), expo-camera/expo-image-picker, TanStack Query + `ky`, Zustand, 이미지/텍스트 입력 → 분석 → 결과 화면, 면책 문구 표시
+- 선행: R2
+- 완료 기준: Expo 앱 기동 / 백엔드 연동 분석 동작 / FSD 레이어 경계 lint 통과
+
+#### R5 — 품질/CI 파이프라인 ⏳ 대기
+- 범위: 저장소 전반 품질 자동화 (PDD §11)
+- 산출물: husky + lint-staged, Conventional Commits 설정, GitHub Actions(lint/test/type-check 필수 — TS/Python 모두), Vitest(web/shared)·Jest(RN)·pytest 구성 정리
+- 선행: R1~R4
+- 완료 기준: CI 워크플로가 lint/test/type-check를 통과 / pre-commit 훅 동작
+
+### Phase 2 (사용자 명시 요청 시에만 시작)
+
+#### R6 — 바코드 입력 ⏳ 대기
+- 범위: `BarcodeLookupPort` + 구현체, `POST /analysis/by-barcode`, `POST /analysis/by-barcode-image`(`AnalysisResult + Product`)
+- 선행: Phase 1 완료, "바코드 → 제품 매핑 소스" 결정
+- 완료 기준: 바코드 경로 엔드포인트 동작 + 테스트 통과
+
+#### R7 — 결과 일관성/예외 처리 고도화 ⏳ 대기
+- 범위: 프롬프트 정교화, JSON schema 강화, 검증/재시도 강화, 저화질·미인식·부분 인식 등 예외 케이스 처리
+- 선행: R6
+
+#### R8 — Rate limiting ⏳ 대기
+- 범위: `slowapi` 기반 IP 단위 rate limit 적용(`RATE_LIMIT_PER_MIN`)
+- 선행: Phase 1 완료
+
+### Phase 3 (사용자 명시 요청 시에만 시작)
+
+#### R9 — 히스토리/비교 (DB·인증 재설계) ⏳ 대기
+- 선행: "Phase 3 DB 및 인증 설계" 결정. 무상태 정책 변경을 수반하므로 사용자 결정 필수.
+
+#### R10 — 결과 표현 정교화/카테고리 정리 ⏳ 대기
+
+#### R11 — 품질 모니터링 ⏳ 대기
+- 범위: 분석 성공률, LLM 응답 검증 실패율 등 모니터링
+
+> 참고: LLM/OCR 실제 provider 도입(mock → real)은 별도 라운드가 아니라, 해당 미결정 항목이
+> 확정된 후 Port 구현체만 추가하는 작업으로 진행한다. Port 인터페이스와 DI 선택 구조는 R1에서 이미 마련되어 있다.
+
+## 미결정 항목
+
+다음 항목은 사용자의 선택이 필요하며, 구현 중 임의로 확정하지 않는다.
+
+- LLM 제공자
+- OCR 제공자
+- 바코드 -> 제품 매핑 소스
+- 백엔드 배포 플랫폼
+- 분석 결과 캐싱 정책
+- 에러 모니터링 도구
+- E2E 테스트 도입 시점
+- Phase 3 DB 및 인증 설계
