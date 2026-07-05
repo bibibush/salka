@@ -35,7 +35,17 @@ description: Use when implementing or modifying UI in the mobile app (apps/mobil
    - **React Native DevTools** 열기로 상태/로그 확인
    - **expo-router sitemap** 생성으로 네비게이션 구조 확인
 3. **수정 → 재확인 루프**: 코드 수정 후 Fast Refresh 반영을 기다렸다가 스크린샷으로 재확인한다. 기대 결과가 나올 때까지 반복한다.
-4. **정리**: 작업이 끝나면 dev 서버 등 백그라운드 프로세스를 종료한다.
+4. **정리**: 작업이 끝나면 아래 "작업 완료 후 리소스 정리"에 따라 이 스킬로 띄운 리소스를 모두 종료한다.
+
+## 작업 완료 후 리소스 정리
+작업이 끝나면(또는 중단할 때) 이 스킬로 띄운 리소스를 **반드시 모두 종료하고, 정리 결과를 확인**한다.
+- **Expo dev 서버(Metro)** 종료: `pkill -f "expo start"` — Metro 포트(기본 8081) 해제 확인.
+- **함께 띄운 백엔드(uvicorn)** 종료: `pkill -f "uvicorn src.main"` — 포트 8000 해제 확인.
+- **부팅한 시뮬레이터/에뮬레이터** 종료: iOS 는 `xcrun simctl shutdown booted`(필요 시 Simulator.app 도 종료), Android 는 에뮬레이터 창을 닫는다.
+- **로컬 Expo MCP automation 도구**(스크린샷/탭 등)는 dev 서버가 종료되면 자동으로 연결 해제된다(별도 조치 불필요).
+- 정리 후 `ps`/`lsof -iTCP:8081 -iTCP:8000 -sTCP:LISTEN` 로 잔여 프로세스·점유 포트가 없는지, `xcrun simctl list devices booted` 로 부팅된 기기가 없는지 확인한다.
+- 원격 Expo MCP(`mcp.expo.dev`)는 세션에 상시 연결된 커넥션이므로 해제 대상이 아니다.
+- 테스트용으로 설치한 `expo-mcp` 등 devDependency 는 프로세스가 아니라 패키지이므로 정리 대상이 아니다. 다만 커밋 전 의도한 변경인지만 확인한다.
 
 ## 확인 포인트
 - 면책 문구 등 정책상 필수 UI 요소가 실제 화면에 렌더되는지 확인한다(AGENTS.md 구현 주의사항).

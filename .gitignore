@@ -30,3 +30,6 @@ __pycache__/
 
 # MCP tool artifacts
 .playwright-mcp/
+
+# Expo
+.expo/

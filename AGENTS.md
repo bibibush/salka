@@ -102,13 +102,22 @@ PDD의 Phase 1/2/3을 **독립적으로 완료·검증 가능한 라운드**로 
   - ESLint 10 미대응으로 `eslint-plugin-react`/`react-hooks`/`react-refresh`는 로딩이 깨져 제외했다. React 규칙은 TypeScript strict + tseslint로 대체하며 ESLint 10 대응 버전 출시 시 재도입한다(R5 CI에서 재점검).
   - Playwright(`web-ui-playwright` 스킬)는 수동 렌더 검증에만 사용했고, E2E 테스트 도입(미결정 항목)은 아직 확정하지 않았다.
 
-#### R4 — Mobile 앱 🔜 다음
-- 범위: `apps/mobile` (Expo SDK 54+, React Native, **FSD 패턴만** — 클린 아키텍처 미적용)
+#### R4 — Mobile 앱 ✅ 완료
+- 범위: `apps/mobile` (Expo SDK 54, React Native, **FSD 패턴만** — 클린 아키텍처 미적용)
 - 산출물: expo-router, NativeWind v4(공용 preset), expo-camera/expo-image-picker, TanStack Query + `ky`, Zustand, 이미지/텍스트 입력 → 분석 → 결과 화면, 면책 문구 표시
 - 선행: R2
 - 완료 기준: Expo 앱 기동 / 백엔드 연동 분석 동작 / FSD 레이어 경계 lint 통과
+- 비고:
+  - FSD 레이어: `app`(expo-router 라우트 루트 = `src/app`, `_layout`에서 전역 provider 조립) → `pages`(analyze/result) → `widgets`(analysis-result) → `features`(analyze-ingredients) → `entities`(analysis: verdict/store/badge/score) → `shared`(api/config/ui). 각 슬라이스는 `index.ts` public API 경유.
+  - **expo-router ↔ FSD `app` 레이어 충돌 해소**: expo-router 는 `src/app` 을 라우트 루트로 우선 채택하므로, 별도 루트 `app/` 를 두지 않고 `src/app` 을 라우트 루트 **겸** FSD app(조립) 레이어로 사용한다. 라우트 파일(`_layout.tsx`/`index.tsx`/`result.tsx`)만 두고 provider 는 `_layout`에 인라인 조립한다(비라우트 파일을 라우트 디렉터리에 두지 않기 위함).
+  - 분석 결과는 Zustand 메모리 store(`entities/analysis`)에만 보관하며, 결과가 없으면(예: 앱 재시작) `<Redirect href="/" />` 로 입력 화면으로 되돌린다(무상태·비저장 원칙).
+  - NativeWind v4 는 Tailwind v3 를 peer 로 요구하므로 `apps/mobile` 은 `tailwindcss@^3` 를 사용한다. 공용 preset(`config-tailwind`)의 `theme.extend` 형태가 v3/v4 호환이라 web(Tailwind v4)과 동일 토큰을 공유한다. RN 특성상 배경색은 View/Pressable, 글자색은 Text 에 분리 적용한다.
+  - 이미지 업로드는 expo-image-picker 자산 `{ uri, name, type }` 을 RN `FormData` 파트로 전달한다(웹의 `Blob` 과 다름). `api-client` wrapper 는 무수정 재사용하고 호출부에서 캐스팅한다.
+  - **모노레포 pnpm ↔ Expo/Metro 정합화**: Expo 공식 가이드에 따라 루트 `.npmrc` 에 `node-linker=hoisted` 를 적용했다. 또한 web(react `^19.2`)과 Expo(react `19.1.0`) 의 React 중복으로 react-query 훅이 깨져, 루트 `pnpm.overrides` 로 `react`/`react-dom` 을 `19.1.0` 으로 단일화했다(web 회귀 없음: type-check·15 테스트 통과 확인).
+  - 상태 검증: `jest`(17) 통과, `tsc --noEmit` 통과, `eslint`(boundaries) 통과, `steiger` 통과, `expo export`(iOS) Metro 번들 성공(1402 modules, 라우트 누락 경고 없음). **시뮬레이터 부팅 및 실기기 백엔드 연동은 이 환경에서 미실행** — 번들·단위 테스트(백엔드 mock)로 배선을 검증했고, 실제 기동/연동 확인은 사용자 환경에서 필요하다.
+  - web(R3)와 동일하게 ESLint 10 미대응인 `eslint-plugin-react`/`react-hooks` 는 제외했고(TypeScript strict + tseslint 로 대체), CJS 설정 파일(metro/babel/tailwind/jest)은 `require()` 허용 override 를 두었다. flat config(eslint/steiger)는 CJS 패키지에서 ESM 로드되도록 `.mjs` 로 둔다.
 
-#### R5 — 품질/CI 파이프라인 ⏳ 대기
+#### R5 — 품질/CI 파이프라인 🔜 다음
 - 범위: 저장소 전반 품질 자동화 (PDD §11)
 - 산출물: husky + lint-staged, Conventional Commits 설정, GitHub Actions(lint/test/type-check 필수 — TS/Python 모두), Vitest(web/shared)·Jest(RN)·pytest 구성 정리
 - 선행: R1~R4

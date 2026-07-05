@@ -28,7 +28,15 @@ description: Use when implementing or modifying UI in the web app (apps/web). Dr
    - `browser_resize` 로 반응형(모바일/데스크톱 뷰포트) 확인
    - `browser_console_messages` 로 콘솔 에러 확인
 4. **수정 → 재확인 루프**: 코드 수정 후 HMR 반영을 기다렸다가 스냅샷/스크린샷으로 재확인한다. 기대한 결과가 나올 때까지 반복한다.
-5. **정리**: 작업이 끝나면 dev 서버 등 백그라운드 프로세스를 종료한다.
+5. **정리**: 작업이 끝나면 아래 "작업 완료 후 리소스 정리"에 따라 이 스킬로 띄운 리소스를 모두 종료한다.
+
+## 작업 완료 후 리소스 정리
+작업이 끝나면(또는 중단할 때) 이 스킬로 띄운 리소스를 **반드시 모두 종료하고, 정리 결과를 확인**한다.
+- **웹 dev 서버(Vite)** 종료: `pkill -f "vite"`(또는 해당 `pnpm --filter web dev` 프로세스) — 포트(기본 5173) 해제 확인.
+- **함께 띄운 백엔드(uvicorn)** 종료: `pkill -f "uvicorn src.main"` — 포트 8000 해제 확인.
+- **Playwright 브라우저** 종료: `browser_close` 로 열어 둔 브라우저/탭을 닫는다.
+- 정리 후 `ps`/`lsof -iTCP:5173 -iTCP:8000 -sTCP:LISTEN` 로 잔여 프로세스·점유 포트가 없는지 확인한다.
+- Playwright MCP 서버 자체는 `.mcp.json` 에 등록된 상시 커넥션이므로 해제 대상이 아니다.
 
 ## 확인 포인트
 - 면책 문구 등 정책상 필수 UI 요소가 실제로 렌더되는지 확인한다(AGENTS.md 구현 주의사항).

@@ -1,0 +1,25 @@
+{
+  "extends": "@cosmetics-analyzer/config-typescript/react-library.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "declaration": false,
+    "declarationMap": false,
+    "sourceMap": false,
+    "jsx": "react-jsx",
+    "baseUrl": ".",
+    "paths": {
+      "@/*": [
+        "./src/*"
+      ]
+    },
+    "types": [
+      "jest",
+      "node"
+    ]
+  },
+  "include": [
+    "src",
+    "nativewind-env.d.ts",
+    "*.config.js"
+  ]
+}
