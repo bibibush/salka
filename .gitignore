@@ -27,3 +27,6 @@ __pycache__/
 *.log
 .idea/
 .vscode/
+
+# MCP tool artifacts
+.playwright-mcp/
