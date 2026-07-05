@@ -89,13 +89,20 @@ PDD의 Phase 1/2/3을 **독립적으로 완료·검증 가능한 라운드**로 
 - 완료 기준: `pnpm install` 성공 / `api-client` 타입이 `apps/api`의 `AnalysisResult` 스키마와 일치 / 공유 패키지가 lint·type-check 통과
 - 비고: 공유 TS 패키지 빌드는 `tsup`(ESM+CJS+d.ts)로 통일. `api-client`는 백엔드 OpenAPI 스냅샷(`openapi.json`)과 생성 타입(`src/generated/schema.ts`)을 함께 커밋해 파이썬 없이도 TS 파이프라인이 동작하며, `pnpm --filter @cosmetics-analyzer/api-client run generate`로 재생성한다. `api-client`↔`shared-types` 동치는 `schema-assert.ts`로 컴파일 타임 검증.
 
-#### R3 — Web 앱 🔜 다음
+#### R3 — Web 앱 ✅ 완료
 - 범위: `apps/web` (Vite + React 19, FSD 패턴, 클린 아키텍처 미적용)
 - 산출물: Tailwind v4(공용 preset), React Router v7, TanStack Query v5 + `ky`, Zustand, 이미지/텍스트 입력 → 분석 → 결과 화면, 면책 문구 표시, 결과는 메모리 store에만 보관
 - 선행: R2
 - 완료 기준: `pnpm --filter web build` 성공 / 로컬에서 백엔드 연동하여 텍스트·이미지 분석 결과 표시 / FSD 레이어 경계 lint 통과
+- 비고:
+  - FSD 레이어: `app`(providers/router) → `pages`(analyze/result) → `widgets`(analysis-result) → `features`(analyze-ingredients) → `entities`(analysis: verdict/store/badge) → `shared`(api/config/ui). 각 슬라이스는 `index.ts` public API 경유.
+  - 분석 결과는 Zustand 메모리 store(`entities/analysis`)에만 보관하며, 결과가 없으면(예: 새로고침) 입력 화면으로 리다이렉트(무상태·비저장 원칙).
+  - 상태 검증: `vitest`(15) 통과, `tsc --noEmit` 통과, `eslint`(boundaries) 통과, `steiger` 통과, `vite build` 성공, 백엔드 연동 텍스트·이미지 경로 브라우저 확인.
+  - 공용 `config-eslint/fsd.js` 보정: `shared`는 슬라이스가 아니라 세그먼트(ui/api/lib/config)로 구성되어 세그먼트 간 상호 참조가 FSD 상 허용되므로 `shared → shared`를 허용하도록 규칙을 추가했다(R4 mobile에도 동일 적용).
+  - ESLint 10 미대응으로 `eslint-plugin-react`/`react-hooks`/`react-refresh`는 로딩이 깨져 제외했다. React 규칙은 TypeScript strict + tseslint로 대체하며 ESLint 10 대응 버전 출시 시 재도입한다(R5 CI에서 재점검).
+  - Playwright(`web-ui-playwright` 스킬)는 수동 렌더 검증에만 사용했고, E2E 테스트 도입(미결정 항목)은 아직 확정하지 않았다.
 
-#### R4 — Mobile 앱 ⏳ 대기
+#### R4 — Mobile 앱 🔜 다음
 - 범위: `apps/mobile` (Expo SDK 54+, React Native, **FSD 패턴만** — 클린 아키텍처 미적용)
 - 산출물: expo-router, NativeWind v4(공용 preset), expo-camera/expo-image-picker, TanStack Query + `ky`, Zustand, 이미지/텍스트 입력 → 분석 → 결과 화면, 면책 문구 표시
 - 선행: R2

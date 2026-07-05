@@ -27,10 +27,15 @@ export function fsdBoundariesConfig(options = {}) {
   }));
 
   // 각 레이어가 import 가능한 하위 레이어 목록을 생성한다.
-  const rules = LAYERS.map((layer, index) => ({
-    from: [layer],
-    allow: LAYERS.slice(index + 1),
-  }));
+  const rules = LAYERS.map((layer, index) => {
+    const allow = LAYERS.slice(index + 1);
+    // shared 는 슬라이스가 아니라 세그먼트(ui/api/lib/config)로 구성되며,
+    // 세그먼트 간 상호 참조는 FSD 상 허용된다. 따라서 shared → shared 를 허용한다.
+    if (layer === 'shared') {
+      allow.push('shared');
+    }
+    return { from: [layer], allow };
+  });
 
   return [
     {
