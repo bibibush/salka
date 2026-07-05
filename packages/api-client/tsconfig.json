@@ -1,0 +1,8 @@
+{
+  "extends": "@cosmetics-analyzer/config-typescript/base.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"]
+  },
+  "include": ["src", "tsup.config.ts"]
+}

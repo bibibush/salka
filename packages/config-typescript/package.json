@@ -1,0 +1,10 @@
+{
+  "name": "@cosmetics-analyzer/config-typescript",
+  "version": "0.0.0",
+  "private": true,
+  "license": "UNLICENSED",
+  "files": [
+    "base.json",
+    "react-library.json"
+  ]
+}

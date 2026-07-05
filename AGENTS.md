@@ -48,6 +48,21 @@
 - API 오류 응답은 RFC 7807 형식(`application/problem+json`)을 따른다.
 - Phase 2 또는 Phase 3 기능은 사용자의 명시적 요청 없이 선행 구현하지 않는다.
 
+## 테스트 원칙 (TDD)
+
+- 모든 구현 작업은 TDD로 진행한다. 구현 코드보다 테스트 코드를 먼저 작성한다.
+- 순서를 반드시 지킨다: (1) 요구사항을 검증하는 실패하는 테스트 작성 → (2) 테스트가 실제로 실패(red)하는 것을 실행해 확인 → (3) 테스트를 통과시키는 최소 구현 작성 → (4) 테스트 통과(green) 확인 → (5) 필요 시 리팩터링(테스트는 계속 green 유지).
+- 테스트를 먼저 실행해 "의도한 이유로 실패"하는지 확인하기 전에는 구현을 시작하지 않는다. 문법 오류·import 오류 등으로 실패하는 것은 유효한 red가 아니다.
+- 실패하는 테스트 없이 구현 코드를 먼저 작성하지 않는다. 기존 코드 수정·버그 수정도 먼저 해당 동작을 재현하는 실패 테스트를 추가한 뒤 진행한다.
+- 테스트는 관찰 가능한 동작·계약(입출력, 에러 응답, 경계 규칙)을 검증하고 내부 구현 세부에 결합하지 않는다.
+- 외부 의존성(LLM/OCR/Barcode 등 Port)은 테스트에서 Mock/Fake로 대체하고, 네트워크·디스크 I/O에 의존하지 않는다.
+
+### 스택별 테스트 도구
+
+- Python(`apps/api`): `pytest`(+`pytest-asyncio`, `asyncio_mode="auto"`)를 사용한다. 클린 아키텍처 레이어별 단위 테스트와 엔드포인트 통합 테스트(`httpx.AsyncClient` + `ASGITransport` 기반 ASGI async client)를 함께 둔다.
+- Web(`apps/web`) 및 공유 패키지(`packages/*`): `Vitest`를 사용한다. React 컴포넌트는 `@testing-library/react`로 사용자 관점 동작을 검증한다.
+- Mobile(`apps/mobile`, React Native/Expo): `Jest`(`jest-expo` preset) + `@testing-library/react-native`를 사용한다. RN 환경 특성상 Vitest 대신 Jest가 표준이므로 이를 적용한다.
+
 ## 라운드별 개발 계획
 
 PDD의 Phase 1/2/3을 **독립적으로 완료·검증 가능한 라운드**로 분할한다. 에이전트는
@@ -67,13 +82,14 @@ PDD의 Phase 1/2/3을 **독립적으로 완료·검증 가능한 라운드**로 
 - 산출물: 루트 설정 파일, `apps/api` 전체(domain/application/infrastructure/interfaces/di/core), Mock LLM/OCR 어댑터, `POST /analysis/by-ingredients-{text,image}`, `GET /health`, RFC 7807 오류, 면책 문구 부착, 단위/통합 테스트
 - 완료 기준: `uv run ruff check .`, `uv run mypy src`, `uv run pytest` 통과 / 서버 기동 후 3개 엔드포인트 정상 / `/openapi.json` 노출
 
-#### R2 — 프론트 공유 패키지 🔜 다음
+#### R2 — 프론트 공유 패키지 ✅ 완료
 - 범위: 모노레포 공유 패키지 구성
 - 산출물: `packages/config-typescript`, `packages/config-eslint`(FSD 경계 강제용 `eslint-plugin-boundaries`/`steiger` 포함), `packages/ui-tokens`, `packages/config-tailwind`(RN/Web 공용 preset), `packages/shared-types`, `packages/api-client`(백엔드 OpenAPI → `openapi-typescript` 타입 생성 + `ky` 기반 wrapper)
 - 선행: R1
 - 완료 기준: `pnpm install` 성공 / `api-client` 타입이 `apps/api`의 `AnalysisResult` 스키마와 일치 / 공유 패키지가 lint·type-check 통과
+- 비고: 공유 TS 패키지 빌드는 `tsup`(ESM+CJS+d.ts)로 통일. `api-client`는 백엔드 OpenAPI 스냅샷(`openapi.json`)과 생성 타입(`src/generated/schema.ts`)을 함께 커밋해 파이썬 없이도 TS 파이프라인이 동작하며, `pnpm --filter @cosmetics-analyzer/api-client run generate`로 재생성한다. `api-client`↔`shared-types` 동치는 `schema-assert.ts`로 컴파일 타임 검증.
 
-#### R3 — Web 앱 ⏳ 대기
+#### R3 — Web 앱 🔜 다음
 - 범위: `apps/web` (Vite + React 19, FSD 패턴, 클린 아키텍처 미적용)
 - 산출물: Tailwind v4(공용 preset), React Router v7, TanStack Query v5 + `ky`, Zustand, 이미지/텍스트 입력 → 분석 → 결과 화면, 면책 문구 표시, 결과는 메모리 store에만 보관
 - 선행: R2

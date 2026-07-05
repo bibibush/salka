@@ -1,0 +1,55 @@
+// FSD(Feature-Sliced Design) 레이어 경계 강제 설정 (eslint-plugin-boundaries).
+//
+// 상위 레이어는 하위 레이어만 import 할 수 있다 (FSD 표준):
+//   app > pages > widgets > features > entities > shared
+// 같은 레이어 슬라이스 간 cross-import 는 금지한다.
+//
+// 앱(Web/RN)은 자신의 eslint.config.js 에서 이 팩토리를 호출해 적용한다:
+//   import { fsdBoundariesConfig } from '@cosmetics-analyzer/config-eslint/fsd';
+//   export default [...reactConfig, ...fsdBoundariesConfig()];
+import boundaries from 'eslint-plugin-boundaries';
+
+// 상위 → 하위 순서. index 가 작을수록 상위 레이어.
+const LAYERS = ['app', 'pages', 'widgets', 'features', 'entities', 'shared'];
+
+/**
+ * @param {object} [options]
+ * @param {string} [options.basePath] 레이어가 위치한 소스 루트 (기본 'src')
+ * @returns {import('eslint').Linter.Config[]}
+ */
+export function fsdBoundariesConfig(options = {}) {
+  const basePath = options.basePath ?? 'src';
+
+  const elements = LAYERS.map((layer) => ({
+    type: layer,
+    pattern: `${basePath}/${layer}/*`,
+    mode: 'folder',
+  }));
+
+  // 각 레이어가 import 가능한 하위 레이어 목록을 생성한다.
+  const rules = LAYERS.map((layer, index) => ({
+    from: [layer],
+    allow: LAYERS.slice(index + 1),
+  }));
+
+  return [
+    {
+      files: [`**/${basePath}/**/*.{ts,tsx,js,jsx}`],
+      plugins: { boundaries },
+      settings: {
+        'boundaries/include': [`**/${basePath}/**/*`],
+        'boundaries/elements': elements,
+      },
+      rules: {
+        'boundaries/element-types': [
+          'error',
+          { default: 'disallow', rules },
+        ],
+        // 같은 레이어 내 다른 슬라이스 직접 참조 금지 (public API 경유 강제)
+        'boundaries/no-private': ['error', { allowUncles: false }],
+      },
+    },
+  ];
+}
+
+export default fsdBoundariesConfig;

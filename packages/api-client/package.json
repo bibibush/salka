@@ -1,0 +1,41 @@
+{
+  "name": "@cosmetics-analyzer/api-client",
+  "version": "0.0.0",
+  "private": true,
+  "license": "UNLICENSED",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "generate:openapi": "node ./scripts/dump-openapi.mjs",
+    "generate:schema": "openapi-typescript ./openapi.json -o ./src/generated/schema.ts",
+    "generate": "pnpm run generate:openapi && pnpm run generate:schema",
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "lint": "eslint .",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@cosmetics-analyzer/shared-types": "workspace:*",
+    "ky": "^2.0.2"
+  },
+  "devDependencies": {
+    "@cosmetics-analyzer/config-eslint": "workspace:*",
+    "@cosmetics-analyzer/config-typescript": "workspace:*",
+    "eslint": "^10.5.0",
+    "openapi-typescript": "^7.13.0",
+    "tsup": "^8.5.1",
+    "typescript": "^6.0.3"
+  }
+}

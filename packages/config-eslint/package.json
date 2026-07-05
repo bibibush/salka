@@ -1,0 +1,37 @@
+{
+  "name": "@cosmetics-analyzer/config-eslint",
+  "version": "0.0.0",
+  "private": true,
+  "license": "UNLICENSED",
+  "type": "module",
+  "exports": {
+    "./base": "./base.js",
+    "./react": "./react.js",
+    "./fsd": "./fsd.js",
+    "./steiger": "./steiger.js"
+  },
+  "files": [
+    "base.js",
+    "react.js",
+    "fsd.js",
+    "steiger.js"
+  ],
+  "scripts": {
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-boundaries": "^6.0.2",
+    "globals": "^17.6.0",
+    "typescript-eslint": "^8.61.1",
+    "steiger": "^0.5.13",
+    "@feature-sliced/steiger-plugin": "^0.6.0"
+  },
+  "peerDependencies": {
+    "eslint": "^10.0.0"
+  },
+  "devDependencies": {
+    "eslint": "^10.5.0"
+  }
+}

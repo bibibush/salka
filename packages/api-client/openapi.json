@@ -1,0 +1,330 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Cosmetics Analyzer API",
+    "description": "화장품 성분 해석 참고 도구 (Phase 1 MVP). 모든 분석 결과는 참고용입니다.",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/health": {
+      "get": {
+        "tags": [
+          "health"
+        ],
+        "summary": "Health",
+        "operationId": "health_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/analysis/by-ingredients-text": {
+      "post": {
+        "tags": [
+          "analysis"
+        ],
+        "summary": "Analyze By Ingredients Text",
+        "operationId": "analyze_by_ingredients_text_api_v1_analysis_by_ingredients_text_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AnalyzeByTextRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnalysisResultSchema"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/analysis/by-ingredients-image": {
+      "post": {
+        "tags": [
+          "analysis"
+        ],
+        "summary": "Analyze By Ingredients Image",
+        "operationId": "analyze_by_ingredients_image_api_v1_analysis_by_ingredients_image_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_analyze_by_ingredients_image_api_v1_analysis_by_ingredients_image_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnalysisResultSchema"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AnalysisResultSchema": {
+        "properties": {
+          "overall_score": {
+            "type": "integer",
+            "title": "Overall Score"
+          },
+          "verdict": {
+            "$ref": "#/components/schemas/Verdict"
+          },
+          "summary": {
+            "type": "string",
+            "title": "Summary"
+          },
+          "recommendation": {
+            "$ref": "#/components/schemas/Recommendation"
+          },
+          "assessments": {
+            "items": {
+              "$ref": "#/components/schemas/IngredientAssessmentSchema"
+            },
+            "type": "array",
+            "title": "Assessments"
+          },
+          "cautions": {
+            "items": {
+              "$ref": "#/components/schemas/CautionSchema"
+            },
+            "type": "array",
+            "title": "Cautions"
+          },
+          "disclaimer": {
+            "type": "string",
+            "title": "Disclaimer"
+          }
+        },
+        "type": "object",
+        "required": [
+          "overall_score",
+          "verdict",
+          "summary",
+          "recommendation",
+          "assessments",
+          "cautions",
+          "disclaimer"
+        ],
+        "title": "AnalysisResultSchema",
+        "description": "분석 결과 응답. 면책 문구(disclaimer)가 항상 포함된다."
+      },
+      "AnalyzeByTextRequest": {
+        "properties": {
+          "ingredients": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Ingredients",
+            "description": "전성분 텍스트. 콤마/줄바꿈 등 구분자로 나열.",
+            "examples": [
+              "Water, Glycerin, Niacinamide, Fragrance"
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "ingredients"
+        ],
+        "title": "AnalyzeByTextRequest",
+        "description": "성분 텍스트 분석 요청."
+      },
+      "Body_analyze_by_ingredients_image_api_v1_analysis_by_ingredients_image_post": {
+        "properties": {
+          "image": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "Image",
+            "description": "전성분 라벨 이미지"
+          }
+        },
+        "type": "object",
+        "required": [
+          "image"
+        ],
+        "title": "Body_analyze_by_ingredients_image_api_v1_analysis_by_ingredients_image_post"
+      },
+      "CautionSchema": {
+        "properties": {
+          "ingredient": {
+            "type": "string",
+            "title": "Ingredient"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason"
+          }
+        },
+        "type": "object",
+        "required": [
+          "ingredient",
+          "reason"
+        ],
+        "title": "CautionSchema"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "HealthResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "Status"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "title": "HealthResponse"
+      },
+      "IngredientAssessmentSchema": {
+        "properties": {
+          "ingredient": {
+            "type": "string",
+            "title": "Ingredient"
+          },
+          "verdict": {
+            "$ref": "#/components/schemas/Verdict"
+          },
+          "score": {
+            "type": "integer",
+            "title": "Score"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason"
+          }
+        },
+        "type": "object",
+        "required": [
+          "ingredient",
+          "verdict",
+          "score",
+          "reason"
+        ],
+        "title": "IngredientAssessmentSchema"
+      },
+      "Recommendation": {
+        "type": "string",
+        "enum": [
+          "RECOMMENDED",
+          "NEUTRAL",
+          "CAUTION_NEEDED"
+        ],
+        "title": "Recommendation",
+        "description": "전체 분석 결과에 대한 참고 판단형 추천 등급.\n\n단정 표현을 피하고 참고 판단형만 사용한다 (PDD §6)."
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      },
+      "Verdict": {
+        "type": "string",
+        "enum": [
+          "GOOD",
+          "CAUTION",
+          "BAD"
+        ],
+        "title": "Verdict",
+        "description": "개별 성분 또는 전체 결과에 대한 판정 등급.\n\n단정형이 아닌 참고 판단형 등급이다."
+      }
+    }
+  }
+}
