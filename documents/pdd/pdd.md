@@ -67,7 +67,18 @@
 | Rate limit | slowapi |
 | 로깅 | structlog (JSON 로그) |
 
-### 2.5 인프라 (참고)
+### 2.5 외부 AI provider
+
+| 역할 | 선택 | 비고 |
+| --- | --- | --- |
+| 이미지 → 텍스트 추출 (OCR) | Google Gemini API | 전통적 OCR 대신 Gemini 비전으로 전성분 이미지에서 텍스트를 추출한다. `OcrPort` 구현체(`OCR_PROVIDER=gemini`). |
+| 성분 분석 (LLM) | OpenAI GPT | 추출된 성분 텍스트를 GPT로 해석·스코어링한다. `LlmAnalysisPort` 구현체(`LLM_PROVIDER=openai`). |
+
+- 결정 근거: 전통적 OCR(Clova/GCV/Tesseract) 대비 Gemini 비전이 전성분 라벨의 다양한 레이아웃·저화질에 강인하고 파이프라인을 단순화하며, 성분 해석은 구조화 출력(function calling/JSON schema)이 성숙한 OpenAI GPT를 사용한다.
+- 구체 모델 버전은 문서에 고정하지 않고 환경변수(`GEMINI_MODEL`, `OPENAI_MODEL`)로 지정한다.
+- 두 provider 모두 Port 인터페이스를 통해서만 접근하며, 초기/테스트에서는 Mock 구현체로 대체 가능하다.
+
+### 2.6 인프라 (참고)
 
 - Mobile: EAS Build / Submit
 - Web: 정적 호스팅 (Vercel / Cloudflare Pages 등, 추후 결정)
@@ -160,8 +171,8 @@ apps/api/
 │   │   ├── ports/               # 추상 인터페이스 (LLM/OCR/Barcode)
 │   │   └── dto/
 │   ├── infrastructure/          # 외부 의존성 구현체
-│   │   ├── llm/                 # mock, openai, anthropic, ...
-│   │   ├── ocr/                 # mock, clova, gcv, llm-vision, ...
+│   │   ├── llm/                 # mock, openai (성분 분석)
+│   │   ├── ocr/                 # mock, gemini (이미지→텍스트 추출)
 │   │   ├── barcode/             # Phase 2 어댑터
 │   │   └── http/
 │   ├── interfaces/              # API 진입점
@@ -208,7 +219,10 @@ class BarcodeLookupPort(Protocol):
     async def lookup(self, barcode: str) -> Product | None: ...
 ```
 
-각 Port는 환경변수 `LLM_PROVIDER`, `OCR_PROVIDER`, `BARCODE_PROVIDER`로 구현체를 선택한다. 초기에는 Mock 구현체를 제공한다.
+각 Port는 환경변수 `LLM_PROVIDER`, `OCR_PROVIDER`, `BARCODE_PROVIDER`로 구현체를 선택한다. 초기에는 Mock 구현체를 제공하며, 확정된 provider는 다음과 같다.
+
+- `OcrPort` → Gemini 비전 구현체(`OCR_PROVIDER=gemini`): 전성분 이미지에서 텍스트 추출
+- `LlmAnalysisPort` → OpenAI GPT 구현체(`LLM_PROVIDER=openai`): 성분 해석·스코어링
 
 ---
 
@@ -279,9 +293,9 @@ Base path: `/api/v1`
 
 ```text
 이미지 입력
-  -> OcrPort.extract_ingredients(image)
+  -> OcrPort.extract_ingredients(image)         # Gemini 비전으로 텍스트 추출
   -> 텍스트 정규화 (구분자 split, 공백/특수문자 정리, 중복 제거)
-  -> LlmAnalysisPort.analyze(ingredients)
+  -> LlmAnalysisPort.analyze(ingredients)       # OpenAI GPT로 해석·스코어링
   -> 결과 정규화 (Score/Verdict 범위 검증)
   -> 면책 문구 부착
   -> AnalysisResult 반환
@@ -354,10 +368,11 @@ E2E(Detox / Playwright)는 Phase 2 이후 도입 검토.
 ### Backend (`apps/api/.env`)
 
 - `ENV` (dev / staging / prod)
-- `LLM_PROVIDER` (mock | openai | anthropic | gemini)
-- `OCR_PROVIDER` (mock | clova | gcv | llm-vision | tesseract)
+- `LLM_PROVIDER` (mock | openai) - 성분 분석
+- `OCR_PROVIDER` (mock | gemini) - 이미지→텍스트 추출
 - `BARCODE_PROVIDER` (mock | ...) - Phase 2
-- `LLM_API_KEY`, `OCR_API_KEY` 등 provider별 키
+- `OPENAI_API_KEY`, `OPENAI_MODEL` - LLM(GPT) provider
+- `GEMINI_API_KEY`, `GEMINI_MODEL` - OCR(Gemini) provider
 - `CORS_ORIGINS`
 - `RATE_LIMIT_PER_MIN`
 
@@ -397,8 +412,6 @@ E2E(Detox / Playwright)는 Phase 2 이후 도입 검토.
 
 ## 15. 추후 결정 사항
 
-- LLM 제공자 (Port만 정의됨)
-- OCR 제공자 (Port만 정의됨)
 - 바코드 -> 제품 매핑 소스 (Phase 2)
 - 백엔드 배포 플랫폼
 - 분석 결과 캐싱 정책 (필요 시 Redis 도입 검토)

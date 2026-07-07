@@ -148,16 +148,15 @@ PDD의 Phase 1/2/3을 **독립적으로 완료·검증 가능한 라운드**로 
 #### R11 — 품질 모니터링 ⏳ 대기
 - 범위: 분석 성공률, LLM 응답 검증 실패율 등 모니터링
 
-> 참고: LLM/OCR 실제 provider 도입(mock → real)은 별도 라운드가 아니라, 해당 미결정 항목이
-> 확정된 후 Port 구현체만 추가하는 작업으로 진행한다. Port 인터페이스와 DI 선택 구조는 R1에서 이미 마련되어 있다.
+> 참고: LLM/OCR provider가 확정되었다(OCR=Gemini 비전, LLM=OpenAI GPT). 실제 provider 도입(mock → real)은
+> 별도 라운드가 아니라 Port 구현체만 추가하는 작업으로 진행한다(`OcrPort`=Gemini, `LlmAnalysisPort`=OpenAI GPT).
+> Port 인터페이스와 DI 선택 구조는 R1에서 이미 마련되어 있으며, 구체 모델은 env(`GEMINI_MODEL`/`OPENAI_MODEL`)로 지정한다.
 
 ## 미결정 항목
 
 다음 항목은 사용자의 선택이 필요하며, 구현 중 임의로 확정하지 않는다.
 항목이 확정되면 「작업 원칙」의 PDD 갱신 규칙에 따라 즉시 PDD에 반영하고 본 목록에서 제거한다.
 
-- LLM 제공자
-- OCR 제공자
 - 바코드 -> 제품 매핑 소스
 - 백엔드 배포 플랫폼
 - 분석 결과 캐싱 정책
