@@ -17,6 +17,8 @@ from src.application.use_cases.analyze_by_ingredients_text import (
 )
 from src.core.config import Settings, get_settings
 from src.infrastructure.llm.mock_llm_analysis_adapter import MockLlmAnalysisAdapter
+from src.infrastructure.llm.openai_llm_analysis_adapter import OpenAiLlmAnalysisAdapter
+from src.infrastructure.ocr.gemini_ocr_adapter import GeminiOcrAdapter
 from src.infrastructure.ocr.mock_ocr_adapter import MockOcrAdapter
 
 
@@ -32,14 +34,28 @@ class Container(containers.DeclarativeContainer):
     settings: providers.Provider[Settings] = providers.Singleton(get_settings)
 
     # --- 외부 의존성 Port 구현체 (provider 선택) ---
+    # Selector는 선택된 키의 provider만 인스턴스화하므로, mock 사용 시 실제 어댑터의
+    # 생성자(및 API 키 fail-fast)는 호출되지 않는다.
     llm_port = providers.Selector(
         providers.Callable(lambda s: s.llm_provider, settings),
         mock=providers.Singleton(MockLlmAnalysisAdapter),
+        openai=providers.Singleton(
+            OpenAiLlmAnalysisAdapter,
+            api_key=providers.Callable(lambda s: s.llm_api_key, settings),
+            model=providers.Callable(lambda s: s.openai_model, settings),
+            reasoning_effort=providers.Callable(lambda s: s.openai_reasoning_effort, settings),
+        ),
     )
 
     ocr_port = providers.Selector(
         providers.Callable(lambda s: s.ocr_provider, settings),
         mock=providers.Singleton(MockOcrAdapter),
+        gemini=providers.Singleton(
+            GeminiOcrAdapter,
+            api_key=providers.Callable(lambda s: s.ocr_api_key, settings),
+            model=providers.Callable(lambda s: s.gemini_model, settings),
+            thinking_level=providers.Callable(lambda s: s.gemini_thinking_level, settings),
+        ),
     )
 
     _disclaimer_text = providers.Callable(lambda s: s.disclaimer_text, settings)

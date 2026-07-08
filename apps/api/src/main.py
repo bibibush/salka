@@ -107,6 +107,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     container = Container()
     container.settings.override(settings)
+    # 선택된 외부 provider(LLM/OCR)를 기동 시점에 즉시 구성해, API 키 누락 등
+    # 설정 오류를 첫 요청이 아니라 앱 기동 시점에 조기 노출한다(fail-fast).
+    container.llm_port()
+    container.ocr_port()
 
     app = FastAPI(
         title="Cosmetics Analyzer API",

@@ -38,6 +38,14 @@ class Settings(BaseSettings):
     llm_api_key: str | None = None
     ocr_api_key: str | None = None
 
+    # provider별 모델·튜닝 (env로 재정의 가능). provider=mock이면 사용되지 않는다.
+    openai_model: str = "gpt-5.5"
+    gemini_model: str = "gemini-3.5-flash"
+    # 추론 강도. provider별 튜닝 값이며 어댑터 밖(Port/use case)으로 노출하지 않는다.
+    # OpenAI=reasoning effort, Gemini=thinking level (동일 값 체계).
+    openai_reasoning_effort: Literal["minimal", "low", "medium", "high"] = "medium"
+    gemini_thinking_level: Literal["minimal", "low", "medium", "high"] = "medium"
+
     # CORS 허용 origin 화이트리스트
     cors_origins: list[str] = Field(
         default_factory=lambda: [
