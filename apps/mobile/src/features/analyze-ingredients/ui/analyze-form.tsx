@@ -6,16 +6,18 @@ import { useAnalysisResultStore } from '@/entities/analysis';
 import { Button } from '@/shared/ui';
 
 import { useAnalyzeImage, useAnalyzeText, type PickedImage } from '../api/use-analyze';
+import { CameraCapture } from './camera-capture';
 
 export interface AnalyzeFormProps {
   /** 분석 성공 후 호출 (예: 결과 화면으로 이동) */
   onAnalyzed?: () => void;
 }
 
-type Mode = 'text' | 'image';
+// 카메라 촬영이 메인. 텍스트/이미지 업로드는 보조 입력 수단이다.
+type Mode = 'camera' | 'upload' | 'text';
 
 export function AnalyzeForm({ onAnalyzed }: AnalyzeFormProps) {
-  const [mode, setMode] = useState<Mode>('text');
+  const [mode, setMode] = useState<Mode>('camera');
   const [ingredients, setIngredients] = useState('');
   const [textError, setTextError] = useState<string | null>(null);
   const [image, setImage] = useState<PickedImage | null>(null);
@@ -23,6 +25,15 @@ export function AnalyzeForm({ onAnalyzed }: AnalyzeFormProps) {
 
   const analyzeText = useAnalyzeText();
   const analyzeImage = useAnalyzeImage();
+
+  const pending = analyzeText.isPending || analyzeImage.isPending;
+  const failed = analyzeText.isError || analyzeImage.isError;
+
+  const analyze = async (image: PickedImage) => {
+    const result = await analyzeImage.mutateAsync(image);
+    setResult(result);
+    onAnalyzed?.();
+  };
 
   const submitText = async () => {
     const trimmed = ingredients.trim();
@@ -53,67 +64,75 @@ export function AnalyzeForm({ onAnalyzed }: AnalyzeFormProps) {
 
   const submitImage = async () => {
     if (!image) return;
-    const result = await analyzeImage.mutateAsync(image);
-    setResult(result);
-    onAnalyzed?.();
+    await analyze(image);
   };
 
-  const pending = analyzeText.isPending || analyzeImage.isPending;
-  const failed = analyzeText.isError || analyzeImage.isError;
-
   return (
-    <View className="flex-col gap-4">
-      <View accessibilityRole="tablist" className="flex-row gap-2">
-        <Button
-          label="텍스트 입력"
-          variant={mode === 'text' ? 'primary' : 'ghost'}
-          accessibilityState={{ selected: mode === 'text' }}
-          onPress={() => setMode('text')}
-        />
-        <Button
-          label="이미지 입력"
-          variant={mode === 'image' ? 'primary' : 'ghost'}
-          accessibilityState={{ selected: mode === 'image' }}
-          onPress={() => setMode('image')}
-        />
-      </View>
-
-      {mode === 'text' ? (
-        <View className="flex-col gap-3">
-          <Text className="text-sm font-medium text-neutral-700">전성분 텍스트</Text>
-          <TextInput
-            accessibilityLabel="전성분 텍스트"
-            multiline
-            numberOfLines={5}
-            placeholder="예: Water, Niacinamide, Glycerin ..."
-            className="rounded-lg border border-neutral-300 p-3 text-base"
-            value={ingredients}
-            onChangeText={setIngredients}
-          />
-          {textError && (
-            <Text accessibilityRole="alert" className="text-sm text-verdict-bad">
-              {textError}
-            </Text>
-          )}
-          <Button label={pending ? '분석 중…' : '분석하기'} disabled={pending} onPress={submitText} />
+    <View className="flex-1 flex-col gap-4">
+      {mode === 'camera' ? (
+        <View className="flex-1 flex-col gap-4">
+          <CameraCapture onCapture={(img) => void analyze(img)} disabled={pending} />
+          <View className="flex-row gap-2">
+            <View className="flex-1">
+              <Button label="이미지 업로드" variant="ghost" onPress={() => setMode('upload')} />
+            </View>
+            <View className="flex-1">
+              <Button label="텍스트 입력" variant="ghost" onPress={() => setMode('text')} />
+            </View>
+          </View>
         </View>
       ) : (
-        <View className="flex-col gap-3">
-          <Text className="text-sm font-medium text-neutral-700">전성분 이미지</Text>
-          {image && (
-            <Image
-              accessibilityLabel="선택한 전성분 이미지"
-              source={{ uri: image.uri }}
-              className="h-48 w-full rounded-lg"
-              resizeMode="cover"
-            />
+        <View className="flex-col gap-4">
+          <View className="flex-row">
+            <Button label="← 촬영으로" variant="ghost" onPress={() => setMode('camera')} />
+          </View>
+
+          {mode === 'text' ? (
+            <View className="flex-col gap-3">
+              <Text className="text-sm font-medium text-neutral-700">전성분 텍스트</Text>
+              <TextInput
+                accessibilityLabel="전성분 텍스트"
+                multiline
+                numberOfLines={5}
+                placeholder="예: Water, Niacinamide, Glycerin ..."
+                className="rounded-lg border border-neutral-300 p-3 text-base"
+                value={ingredients}
+                onChangeText={setIngredients}
+              />
+              {textError && (
+                <Text accessibilityRole="alert" className="text-sm text-verdict-bad">
+                  {textError}
+                </Text>
+              )}
+              <Button
+                label={pending ? '분석 중…' : '분석하기'}
+                disabled={pending}
+                onPress={submitText}
+              />
+            </View>
+          ) : (
+            <View className="flex-col gap-3">
+              <Text className="text-sm font-medium text-neutral-700">전성분 이미지</Text>
+              {image && (
+                <Image
+                  accessibilityLabel="선택한 전성분 이미지"
+                  source={{ uri: image.uri }}
+                  className="h-48 w-full rounded-lg"
+                  resizeMode="cover"
+                />
+              )}
+              <Button
+                label={image ? '다른 이미지 선택' : '이미지 선택'}
+                variant="ghost"
+                onPress={pickImage}
+              />
+              <Button
+                label={pending ? '분석 중…' : '분석하기'}
+                disabled={pending || !image}
+                onPress={submitImage}
+              />
+            </View>
           )}
-          <Button label={image ? '다른 이미지 선택' : '이미지 선택'} variant="ghost" onPress={pickImage} />
-          <Button
-            label={pending ? '분석 중…' : '분석하기'}
-            disabled={pending || !image}
-            onPress={submitImage}
-          />
         </View>
       )}
 

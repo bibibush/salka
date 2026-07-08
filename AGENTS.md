@@ -104,7 +104,7 @@ PDD의 Phase 1/2/3을 **독립적으로 완료·검증 가능한 라운드**로 
 
 #### R4 — Mobile 앱 ✅ 완료
 - 범위: `apps/mobile` (Expo SDK 54, React Native, **FSD 패턴만** — 클린 아키텍처 미적용)
-- 산출물: expo-router, NativeWind v4(공용 preset), expo-camera/expo-image-picker, TanStack Query + `ky`, Zustand, 이미지/텍스트 입력 → 분석 → 결과 화면, 면책 문구 표시
+- 산출물: expo-router, NativeWind v4(공용 preset), expo-camera/expo-image-picker, TanStack Query + `ky`, Zustand, 카메라 촬영(메인)/이미지 업로드/텍스트 입력 → 분석 → 결과 화면, 면책 문구 표시
 - 선행: R2
 - 완료 기준: Expo 앱 기동 / 백엔드 연동 분석 동작 / FSD 레이어 경계 lint 통과
 - 비고:
@@ -112,9 +112,12 @@ PDD의 Phase 1/2/3을 **독립적으로 완료·검증 가능한 라운드**로 
   - **expo-router ↔ FSD `app` 레이어 충돌 해소**: expo-router 는 `src/app` 을 라우트 루트로 우선 채택하므로, 별도 루트 `app/` 를 두지 않고 `src/app` 을 라우트 루트 **겸** FSD app(조립) 레이어로 사용한다. 라우트 파일(`_layout.tsx`/`index.tsx`/`result.tsx`)만 두고 provider 는 `_layout`에 인라인 조립한다(비라우트 파일을 라우트 디렉터리에 두지 않기 위함).
   - 분석 결과는 Zustand 메모리 store(`entities/analysis`)에만 보관하며, 결과가 없으면(예: 앱 재시작) `<Redirect href="/" />` 로 입력 화면으로 되돌린다(무상태·비저장 원칙).
   - NativeWind v4 는 Tailwind v3 를 peer 로 요구하므로 `apps/mobile` 은 `tailwindcss@^3` 를 사용한다. 공용 preset(`config-tailwind`)의 `theme.extend` 형태가 v3/v4 호환이라 web(Tailwind v4)과 동일 토큰을 공유한다. RN 특성상 배경색은 View/Pressable, 글자색은 Text 에 분리 적용한다.
-  - 이미지 업로드는 expo-image-picker 자산 `{ uri, name, type }` 을 RN `FormData` 파트로 전달한다(웹의 `Blob` 과 다름). `api-client` wrapper 는 무수정 재사용하고 호출부에서 캐스팅한다.
+  - **카메라 촬영이 메인 입력**(사용자 결정, 근거: 모바일에서 전성분 표시면을 즉석 촬영하는 흐름이 1차 진입점): `features/analyze-ingredients`의 `CameraCapture`가 `expo-camera` `CameraView` 라이브 프리뷰를 히어로로 띄우고 셔터로 `takePictureAsync` → `{ uri, name, type }` 이미지로 이미지 분석 경로 재사용. 이미지 업로드/텍스트 입력은 보조 모드(mode: `camera`(기본) | `upload` | `text`). 권한 미허용 시 프리뷰 대신 `useCameraPermissions` 기반 권한 요청 UI 표시. 앱 진입 화면(`AnalyzePage`)은 ScrollView 대신 flex 컬럼으로 바꿔 프리뷰가 화면을 채운다.
+  - 이미지 업로드는 expo-image-picker 자산 `{ uri, name, type }` 을 RN `FormData` 파트로 전달한다(웹의 `Blob` 과 다름). `api-client` wrapper 는 무수정 재사용하고 호출부에서 캐스팅한다. 카메라 촬영도 동일 `{ uri, name, type }` 형태로 같은 경로를 탄다.
   - **모노레포 pnpm ↔ Expo/Metro 정합화**: Expo 공식 가이드에 따라 루트 `.npmrc` 에 `node-linker=hoisted` 를 적용했다. 또한 web(react `^19.2`)과 Expo(react `19.1.0`) 의 React 중복으로 react-query 훅이 깨져, 루트 `pnpm.overrides` 로 `react`/`react-dom` 을 `19.1.0` 으로 단일화했다(web 회귀 없음: type-check·15 테스트 통과 확인).
-  - 상태 검증: `jest`(17) 통과, `tsc --noEmit` 통과, `eslint`(boundaries) 통과, `steiger` 통과, `expo export`(iOS) Metro 번들 성공(1402 modules, 라우트 누락 경고 없음). **시뮬레이터 부팅 및 실기기 백엔드 연동은 이 환경에서 미실행** — 번들·단위 테스트(백엔드 mock)로 배선을 검증했고, 실제 기동/연동 확인은 사용자 환경에서 필요하다.
+  - 상태 검증: `jest`(20, 카메라 촬영 3케이스 포함) 통과, `eslint`(boundaries) 통과, `steiger` 통과, `expo export`(iOS) Metro 번들 성공(라우트 누락 경고 없음). **시뮬레이터 부팅 및 실기기 연동은 이 환경에서 미실행** — 특히 **카메라 라이브 프리뷰/셔터는 시뮬레이터에 카메라 하드웨어가 없어 실기기 확인이 필수**다. 번들·단위 테스트(카메라 네이티브 모듈 mock)로 배선을 검증했다.
+  - 카메라 테스트는 `expo-camera`를 mock 하며, `CameraView` mock 은 RN host 컴포넌트를 렌더하면 nativewind babel 변환과 충돌하므로 `null` 을 반환하고 `ref` 로 `takePictureAsync` 만 노출한다. `camera-view` testID 는 실제 컴포넌트의 프리뷰 래퍼에 둔다.
+  - 참고: 이 환경에서 `tsc --noEmit` 이 `global.css` side-effect import 타입 선언 누락(TS2882)으로 실패하나, 이는 신규 변경과 무관한 사전 존재 이슈(clean 트리에서도 재현)이며 카메라 신규 코드에는 타입 오류가 없다.
   - web(R3)와 동일하게 ESLint 10 미대응인 `eslint-plugin-react`/`react-hooks` 는 제외했고(TypeScript strict + tseslint 로 대체), CJS 설정 파일(metro/babel/tailwind/jest)은 `require()` 허용 override 를 두었다. flat config(eslint/steiger)는 CJS 패키지에서 ESM 로드되도록 `.mjs` 로 둔다.
 
 #### R5 — 품질/CI 파이프라인 🔜 다음
