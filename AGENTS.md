@@ -150,7 +150,7 @@ PDD의 Phase 1/2/3을 **독립적으로 완료·검증 가능한 라운드**로 
 
 > 참고: LLM/OCR provider가 확정되었다(OCR=Gemini 비전, LLM=OpenAI GPT). 실제 provider 도입(mock → real)은
 > 별도 라운드가 아니라 Port 구현체만 추가하는 작업으로 진행한다(`OcrPort`=Gemini, `LlmAnalysisPort`=OpenAI GPT).
-> Port 인터페이스와 DI 선택 구조는 R1에서 이미 마련되어 있으며, 구체 모델은 env(`GEMINI_MODEL`/`OPENAI_MODEL`)로 지정한다.
+> Port 인터페이스와 DI 선택 구조는 R1에서 이미 마련되어 있으며, 구체 모델과 추론 강도는 env가 아니라 `Settings` 객체(`apps/api/src/core/config.py`)에 고정 기본값(`ClassVar`)으로 둔다.
 
 ## 미결정 항목
 

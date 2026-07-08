@@ -75,8 +75,8 @@
 | 성분 분석 (LLM) | OpenAI GPT | 추출된 성분 텍스트를 GPT로 해석·스코어링한다. `LlmAnalysisPort` 구현체(`LLM_PROVIDER=openai`). |
 
 - 결정 근거: 전통적 OCR(Clova/GCV/Tesseract) 대비 Gemini 비전이 전성분 라벨의 다양한 레이아웃·저화질에 강인하고 파이프라인을 단순화하며, 성분 해석은 구조화 출력(function calling/JSON schema)이 성숙한 OpenAI GPT를 사용한다.
-- 구체 모델 버전은 문서에 고정하지 않고 환경변수(`GEMINI_MODEL`, `OPENAI_MODEL`)로 지정한다. 현재 기본값은 `OPENAI_MODEL=gpt-5.5`, `GEMINI_MODEL=gemini-3.5-flash`이며 env로 재정의한다.
-- 추론 강도는 어댑터(infrastructure)에서만 설정하고 Port·use case에는 노출하지 않는다(provider별 튜닝 값). OpenAI는 `OPENAI_REASONING_EFFORT`(reasoning effort, 기본 medium), Gemini는 `GEMINI_THINKING_LEVEL`(thinking level, 기본 low)로 조정하며 둘 다 `minimal|low|medium|high` 값 체계를 공유한다.
+- 구체 모델 버전은 환경변수가 아니라 `Settings` 객체(`apps/api/src/core/config.py`)에 고정 기본값으로 둔다: `openai_model=gpt-5.5`, `gemini_model=gemini-3.5-flash`. (결정 근거: 모델 버전은 코드 릴리스와 함께 검증·배포되어야 하는 값이라 배포 환경별 env 재정의 대상에서 제외하고 코드에 고정한다. `ClassVar`로 선언해 pydantic-settings 필드가 아니므로 env 소스에서 자동 제외된다.)
+- 추론 강도는 어댑터(infrastructure)에서만 설정하고 Port·use case에는 노출하지 않는다(provider별 튜닝 값). `Settings` 객체에 고정 기본값으로 두며 env로 재정의하지 않는다: OpenAI `openai_reasoning_effort=medium`(reasoning effort), Gemini `gemini_thinking_level=medium`(thinking level). 둘 다 `minimal|low|medium|high` 값 체계를 공유한다.
 - 두 provider 모두 Port 인터페이스를 통해서만 접근하며, Mock(`*_PROVIDER=mock`)과 실제 구현체(`OpenAiLlmAnalysisAdapter`/`GeminiOcrAdapter`)가 모두 등록되어 있다. 실제 provider 선택 시 API 키가 없으면 앱 기동 시점에 fail-fast 한다.
 - 실제 구현체는 각 SDK의 최신 API 를 사용한다: OpenAI 는 Responses API(`client.responses.parse` + `text_format`), Gemini 는 Interactions API(`client.aio.interactions.create`).
 - 구조화 출력 JSON 스키마(`RawResult`)는 mock·OpenAI 어댑터가 공유하는 단일 소스(`infrastructure/llm/raw_result.py`)로 관리해 스키마 드리프트를 방지한다.
@@ -374,8 +374,8 @@ E2E(Detox / Playwright)는 Phase 2 이후 도입 검토.
 - `LLM_PROVIDER` (mock | openai) - 성분 분석
 - `OCR_PROVIDER` (mock | gemini) - 이미지→텍스트 추출
 - `BARCODE_PROVIDER` (mock | ...) - Phase 2
-- `LLM_API_KEY`, `OPENAI_MODEL`, `OPENAI_REASONING_EFFORT` - LLM(GPT) provider (openai 선택 시 키 필수)
-- `OCR_API_KEY`, `GEMINI_MODEL`, `GEMINI_THINKING_LEVEL` - OCR(Gemini) provider (gemini 선택 시 키 필수)
+- `LLM_API_KEY` - LLM(GPT) provider (openai 선택 시 키 필수). 모델·추론 강도(`openai_model`/`openai_reasoning_effort`)는 env가 아니라 `Settings` 객체에 고정한다.
+- `OCR_API_KEY` - OCR(Gemini) provider (gemini 선택 시 키 필수). 모델·추론 강도(`gemini_model`/`gemini_thinking_level`)는 env가 아니라 `Settings` 객체에 고정한다.
 - `CORS_ORIGINS`
 - `RATE_LIMIT_PER_MIN`
 - `MAX_UPLOAD_BYTES`, `DISCLAIMER_TEXT`
