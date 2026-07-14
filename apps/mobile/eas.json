@@ -1,0 +1,39 @@
+{
+  "$schema": "https://raw.githubusercontent.com/expo/eas-cli/main/packages/eas-json/schema.json",
+  "cli": {
+    "version": ">= 12.0.0",
+    "appVersionSource": "remote"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal"
+    },
+    "preview": {
+      "distribution": "internal",
+      "channel": "preview",
+      "ios": {
+        "simulator": true
+      },
+      "android": {
+        "buildType": "apk"
+      }
+    },
+    "production": {
+      "channel": "production",
+      "autoIncrement": true
+    }
+  },
+  "submit": {
+    "production": {
+      "ios": {
+        "//": "실제 값 필요: App Store Connect API Key(권장) 또는 Apple ID. EAS remote credentials 로 관리하거나 아래 필드를 채운다.",
+        "ascAppId": "REPLACE_WITH_APP_STORE_CONNECT_APP_ID"
+      },
+      "android": {
+        "//": "실제 값 필요: Google Play 서비스 계정 JSON 경로 또는 EAS 시크릿. 초기 트랙은 internal 로 둔다.",
+        "track": "internal"
+      }
+    }
+  }
+}

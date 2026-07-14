@@ -73,7 +73,7 @@ PDD의 Phase 1/2/3을 **독립적으로 완료·검증 가능한 라운드**로 
 - 라운드는 위에서 아래 순서로 진행하며, 사용자가 명시적으로 지정하면 해당 라운드부터 진행한다.
 - 한 라운드의 "완료 기준"을 모두 충족하기 전에는 다음 라운드를 시작하지 않는다.
 - 라운드 범위를 벗어나는 작업(특히 다음 Phase 기능)은 사용자 요청 없이 선행하지 않는다.
-- 상태 표기: `✅ 완료` / `🔜 다음` / `⏳ 대기`.
+- 상태 표기: `✅ 완료` / `🔄 진행중` / `🔜 다음` / `⏳ 대기`.
 
 ### Phase 1 (MVP)
 
@@ -120,11 +120,20 @@ PDD의 Phase 1/2/3을 **독립적으로 완료·검증 가능한 라운드**로 
   - 참고: 이 환경에서 `tsc --noEmit` 이 `global.css` side-effect import 타입 선언 누락(TS2882)으로 실패하나, 이는 신규 변경과 무관한 사전 존재 이슈(clean 트리에서도 재현)이며 카메라 신규 코드에는 타입 오류가 없다.
   - web(R3)와 동일하게 ESLint 10 미대응인 `eslint-plugin-react`/`react-hooks` 는 제외했고(TypeScript strict + tseslint 로 대체), CJS 설정 파일(metro/babel/tailwind/jest)은 `require()` 허용 override 를 두었다. flat config(eslint/steiger)는 CJS 패키지에서 ESM 로드되도록 `.mjs` 로 둔다.
 
-#### R5 — 품질/CI 파이프라인 🔜 다음
+#### R5 — 품질/CI 파이프라인 🔄 진행중
 - 범위: 저장소 전반 품질 자동화 (PDD §11)
 - 산출물: husky + lint-staged, Conventional Commits 설정, GitHub Actions(lint/test/type-check 필수 — TS/Python 모두), Vitest(web/shared)·Jest(RN)·pytest 구성 정리
 - 선행: R1~R4
 - 완료 기준: CI 워크플로가 lint/test/type-check를 통과 / pre-commit 훅 동작
+- 비고(진행 상황):
+  - **CI/CD 워크플로 초안 작성 완료(초안 단계 — "완료" 아님)**: 모바일이 Expo Managed(네이티브 폴더 없음)라 배포는 EAS Build/Submit 경로를 기준으로 잡았고, 파이프라인을 (A) CI 품질 게이트와 (B) 모바일 CD 두 갈래로 분리했다. 트리거 브랜치는 `main` 이 아닌 **`prod`** 이며, 모노레포 경로 기반 선택 실행을 적용했다(사용자 결정).
+    - `.github/workflows/ci.yml`: 경로 기반 선택 CI. `changes` job(`dorny/paths-filter`)이 web/mobile/api/shared 변경을 감지하고, 각 앱 job 은 자기 경로 변경 또는 `shared`(루트 파일·`packages/**`) 변경 시 실행한다. 앱 job 은 turbo `--filter`(web/mobile)·`lint:fsd`(steiger)·mobile `expo export` 스모크, `packages` job(shared 시 `--filter=./packages/*`), `api` job(uv `sync`/`ruff`/`mypy`/`pytest`). node `.nvmrc`(22), pnpm 10.28.0. 트리거: PR + `prod` push.
+    - `.github/workflows/mobile-cd.yml`: `prod` push 시 `changes`(paths-filter)로 모바일 영향/네이티브 변경 감지 → `decide` job 이 분기: **네이티브 변경(apps/mobile/package.json·app.json·eas.json, pnpm-lock.yaml) O → `eas build`+`eas submit`, X → `eas update`(OTA)**, 모바일 무관 → 실행 안 함. 수동(`workflow_dispatch`)은 `mode`(auto/ota/build-submit)로 강제 가능(auto+수동은 OTA). `expo/expo-github-action`+`EXPO_TOKEN` 인증.
+    - `apps/mobile/eas.json`: development/preview/production build 프로파일 + submit 프로파일 초안(자격증명 자리 플레이스홀더).
+    - `apps/mobile/app.json`: EAS 빌드에 필수인 `ios.bundleIdentifier`/`android.package` 를 플레이스홀더(`com.cosmeticsanalyzer.app`)로 추가 — **실제 값으로 교체 필요**.
+  - **미완(완료 기준 미충족)**: husky/lint-staged/Conventional Commits(commitlint) 로컬 훅 미도입. 실제 EAS 자격증명(EXPO_TOKEN, App Store Connect API Key, Google Play 서비스 계정)·`eas init`(projectId) 미설정. CI 를 GitHub 에서 실제로 돌려 green 확인(완료 기준) 미실행 — 초안 단계. `prod` 브랜치 생성/운영 정책도 미정.
+  - 자격증명·시크릿 값은 `.env` 등 파일로 만들지 않고 GitHub Actions Secrets/Variables 로만 참조한다(사용자 요청). 필요한 항목: Secret `EXPO_TOKEN`, Variable `EXPO_PUBLIC_API_BASE_URL`.
+  - R3/R4 비고와 동일하게 ESLint 10 미대응 `eslint-plugin-react`/`react-hooks` 는 제외 상태이며 대응 버전 출시 시 재도입 재점검.
 
 ### Phase 2 (사용자 명시 요청 시에만 시작)
 

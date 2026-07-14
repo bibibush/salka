@@ -1,0 +1,160 @@
+# =============================================================================
+# (A) CI — 품질 게이트 파이프라인 [R5 초안 / DRAFT]
+# -----------------------------------------------------------------------------
+# 모노레포 경로 기반 선택 실행:
+#   - 특정 앱(apps/web | apps/mobile | apps/api)만 변경 → 해당 앱 job 만 실행
+#   - 루트 파일 또는 packages/** 변경(shared) → 모든 앱 + packages 전체 실행
+#
+# 트리거: PR(모든 대상) + prod 브랜치 push.
+# 변경 경로 감지는 dorny/paths-filter 로 한 곳(changes job)에서 관리한다.
+#
+# 참고(R3/R4 비고와 동일): ESLint 10 미대응으로 eslint-plugin-react /
+# react-hooks 는 제외된 상태이며, 대응 버전 출시 시 재도입한다.
+# 필요 시크릿/변수: 없음(품질 검증은 외부 자격증명 불필요).
+# =============================================================================
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [prod]
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # 변경 경로 감지 — 어떤 앱을 돌릴지 결정한다.
+  # shared(루트/packages) 가 바뀌면 모든 앱을 돌린다.
+  # ---------------------------------------------------------------------------
+  changes:
+    name: Detect changes
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      web: ${{ steps.filter.outputs.web }}
+      mobile: ${{ steps.filter.outputs.mobile }}
+      api: ${{ steps.filter.outputs.api }}
+      shared: ${{ steps.filter.outputs.shared }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Filter paths
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            shared:
+              - 'package.json'
+              - 'pnpm-lock.yaml'
+              - 'pnpm-workspace.yaml'
+              - 'turbo.json'
+              - '.npmrc'
+              - '.nvmrc'
+              - 'tsconfig*.json'
+              - 'packages/**'
+              - '.github/workflows/**'
+            web:
+              - 'apps/web/**'
+            mobile:
+              - 'apps/mobile/**'
+            api:
+              - 'apps/api/**'
+
+  # ---------------------------------------------------------------------------
+  # apps/web — 자기 변경 또는 shared 변경 시 실행
+  # ---------------------------------------------------------------------------
+  web:
+    name: web (lint / type-check / test)
+    needs: changes
+    if: ${{ needs.changes.outputs.web == 'true' || needs.changes.outputs.shared == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # turbo 가 ^build 로 의존 패키지(dist)를 먼저 빌드한다.
+      - run: pnpm turbo run lint type-check test --filter=web
+      - name: FSD boundaries (steiger)
+        run: pnpm --filter web lint:fsd
+
+  # ---------------------------------------------------------------------------
+  # apps/mobile — 자기 변경 또는 shared 변경 시 실행
+  # ---------------------------------------------------------------------------
+  mobile:
+    name: mobile (lint / type-check / test)
+    needs: changes
+    if: ${{ needs.changes.outputs.mobile == 'true' || needs.changes.outputs.shared == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm turbo run lint type-check test --filter=mobile
+      - name: FSD boundaries (steiger)
+        run: pnpm --filter mobile lint:fsd
+      # (선택) Metro 번들 스모크 — 실제 앱 빌드 아님.
+      - name: Mobile bundle smoke (expo export)
+        run: pnpm --filter mobile export
+
+  # ---------------------------------------------------------------------------
+  # packages/* — shared 변경 시 패키지 자체 lint/type-check/test
+  # (앱 job 은 패키지를 dist 로만 빌드하므로 패키지 자체 검증은 여기서 한다)
+  # ---------------------------------------------------------------------------
+  packages:
+    name: packages (lint / type-check / test)
+    needs: changes
+    if: ${{ needs.changes.outputs.shared == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm turbo run lint type-check test --filter='./packages/*'
+
+  # ---------------------------------------------------------------------------
+  # apps/api (Python/uv) — 자기 변경 또는 shared 변경 시 실행
+  # (사용자 규칙: 루트/packages 변경 시 모든 레포 포함. api 는 packages 를
+  #  직접 의존하지 않지만 규칙에 따라 함께 검증한다.)
+  # ---------------------------------------------------------------------------
+  api:
+    name: api (ruff / mypy / pytest)
+    needs: changes
+    if: ${{ needs.changes.outputs.api == 'true' || needs.changes.outputs.shared == 'true' }}
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/api
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          python-version: "3.12"
+      - run: uv sync
+      - run: uv run ruff check .
+      - run: uv run mypy
+      - run: uv run pytest
