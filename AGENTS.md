@@ -120,18 +120,18 @@ PDD의 Phase 1/2/3을 **독립적으로 완료·검증 가능한 라운드**로 
   - R5에서 `global.css` side-effect import 선언(`global.d.ts`)을 추가해 `tsc --noEmit` TS2882를 해소했다.
   - R5 재점검에서 ESLint 10 호환이 확인된 `eslint-plugin-react-hooks`는 재도입했다. `eslint-plugin-react` 7.37.5는 peer 범위가 ESLint 9까지라 계속 제외한다. CJS 설정 파일(metro/babel/tailwind/jest)은 `require()` 허용 override 를 두었고, flat config(eslint/steiger)는 CJS 패키지에서 ESM 로드되도록 `.mjs` 로 둔다.
 
-#### R5 — 품질/CI 파이프라인 🔄 진행중
+#### R5 — 품질/CI 파이프라인 ✅ 완료
 - 범위: 저장소 전반 품질 자동화 (PDD §11)
 - 산출물: husky + lint-staged, Conventional Commits 설정, GitHub Actions(lint/test/type-check 필수 — TS/Python 모두), Vitest(web/shared)·Jest(RN)·pytest 구성 정리
 - 선행: R1~R4
 - 완료 기준: CI 워크플로가 lint/test/type-check를 통과 / pre-commit 훅 동작
-- 비고(진행 상황):
-  - **CI 품질 게이트 로컬 완성**: 트리거 브랜치는 `main` 이 아닌 **`prod`** 이며, 모노레포 경로 기반 선택 실행을 적용했다(사용자 결정).
+- 비고(완료 내역):
+  - **CI 품질 게이트 완성**: 트리거 브랜치는 `main` 이 아닌 **`prod`** 이며, 모노레포 경로 기반 선택 실행을 적용했다(사용자 결정).
     - `.github/workflows/ci.yml`: `quality-config` job은 경로와 무관하게 저장소 품질 설정을 검증한다. `changes` job(`dorny/paths-filter`)은 web/mobile/api/shared 변경을 감지하고, 각 앱 job은 자기 경로 변경 또는 `shared`(루트 파일·`packages/**`) 변경 시 실행한다. 앱 job은 turbo `--filter`(web/mobile)·`lint:fsd`(steiger)·mobile `expo export` 스모크, `packages` job(shared 시 `--filter=./packages/*`), `api` job(uv `sync`/`ruff`/`mypy`/`pytest`)을 수행한다. node `.nvmrc`(22), pnpm 10.28.0. 트리거: PR + `prod` push.
     - `actionlint` 1.7.12로 `ci.yml`/`mobile-cd.yml` 문법 검증 통과. `pnpm install --frozen-lockfile`과 CI 상당 명령을 로컬에서 모두 통과했다: Web Vitest 15, Mobile Jest 20, shared Vitest 2, API pytest 45, TS/Python lint·type-check, Web/Mobile FSD steiger, Expo iOS export.
   - **로컬 훅 완성**: husky `prepare`, lint-staged, commitlint Conventional 설정을 추가했다. pre-commit은 Web/Mobile/packages ESLint, API ruff check/format, 공통 Prettier를 staged 파일에만 적용한다. 격리 Git 인덱스에서 pre-commit 성공을 확인했고, commit-msg는 유효한 `chore:` 메시지를 통과시키고 비규약 메시지를 거부한다.
   - **테스트/타입/린트 구성 정리**: 품질 설정 계약 테스트 9개와 `shared-types` Vitest 2개를 추가했다. PDD의 TypeScript 5.x와 Expo React 19.1 계약에 맞춰 workspace 선언을 TypeScript 5.9.3/React 19.1로 정렬하고 peer 경고를 제거했으며, TS6 전용 `ignoreDeprecations: "6.0"` 옵션과 프로젝트 tsconfig의 `baseUrl`도 제거했다. Mobile CSS 선언 누락을 해소했고, Jest의 React Query mutation GC 타이머를 비활성화해 테스트 종료 hang을 제거했다. pnpm hoisted 환경에서 Zod v3/v4가 섞이지 않도록 React Hooks 하위 의존성을 v4로 고정해 Web type-check와 Hooks 로딩을 복구했다. `eslint-plugin-boundaries` v6의 `boundaries/dependencies` 객체 selector로 이전해 deprecated 경고를 제거하고 public API 경계를 유지한다.
-  - **R5 남은 완료 조건**: GitHub Actions 원격 실행 green 확인만 남았다. 2026-07-15 원격 조회 기준 현재 HEAD의 workflow run과 `prod` 브랜치가 없어 아직 실제 실행할 수 없으므로 R5 상태를 `🔄 진행중`으로 유지한다. 변경을 PR로 올리거나 `prod` 브랜치를 생성·push한 뒤 Actions green을 확인하면 `✅ 완료`로 전환한다.
+  - **R5 완료 확인(2026-07-15)**: `prod` 브랜치를 생성하고 R5 구현 커밋 `4af617d`를 push했다. GitHub Actions CI 실행 `29418818832`에서 `quality config`, `Detect changes`, packages, Web, Mobile, API 6개 job이 모두 green으로 완료되어 R5 완료 기준을 충족했다.
   - **모바일 CD는 별도 초안**: 모바일이 Expo Managed(네이티브 폴더 없음)라 EAS Build/Submit 경로를 기준으로 작성했으며, R5-CD2에서 실동작을 완성한다. R5-CD2 자격증명과 projectId가 준비되기 전에는 `prod` push에서 실패하지 않도록 `workflow_dispatch` 수동 실행만 허용한다.
     - `.github/workflows/mobile-cd.yml`: R5-CD2에서 `prod` push 트리거를 활성화하면 `changes`(paths-filter)로 모바일 영향/네이티브 변경 감지 → `decide` job 이 분기한다. **네이티브 변경(apps/mobile/package.json·app.json·eas.json, pnpm-lock.yaml) O → `eas build`+`eas submit`, X → `eas update`(OTA)**, 모바일 무관 → 실행 안 함. 현재 수동(`workflow_dispatch`)은 `mode`(auto/ota/build-submit)로 강제 가능(auto+수동은 OTA). `expo/expo-github-action`+`EXPO_TOKEN` 인증.
     - `apps/mobile/eas.json`: development/preview/production build 프로파일 + submit 프로파일 초안(자격증명 자리 플레이스홀더).
