@@ -99,7 +99,7 @@ PDD의 Phase 1/2/3을 **독립적으로 완료·검증 가능한 라운드**로 
   - 분석 결과는 Zustand 메모리 store(`entities/analysis`)에만 보관하며, 결과가 없으면(예: 새로고침) 입력 화면으로 리다이렉트(무상태·비저장 원칙).
   - 상태 검증: `vitest`(15) 통과, `tsc --noEmit` 통과, `eslint`(boundaries) 통과, `steiger` 통과, `vite build` 성공, 백엔드 연동 텍스트·이미지 경로 브라우저 확인.
   - 공용 `config-eslint/fsd.js` 보정: `shared`는 슬라이스가 아니라 세그먼트(ui/api/lib/config)로 구성되어 세그먼트 간 상호 참조가 FSD 상 허용되므로 `shared → shared`를 허용하도록 규칙을 추가했다(R4 mobile에도 동일 적용).
-  - ESLint 10 미대응으로 `eslint-plugin-react`/`react-hooks`/`react-refresh`는 로딩이 깨져 제외했다. React 규칙은 TypeScript strict + tseslint로 대체하며 ESLint 10 대응 버전 출시 시 재도입한다(R5 CI에서 재점검).
+  - R5 재점검에서 ESLint 10 호환이 확인된 `eslint-plugin-react-hooks`/`react-refresh`는 재도입했다. `eslint-plugin-react` 7.37.5는 peer 범위가 ESLint 9까지라 계속 제외하며 React 기본 검사는 TypeScript strict + tseslint로 보완한다.
   - Playwright(`web-ui-playwright` 스킬)는 수동 렌더 검증에만 사용했고, E2E 테스트 도입(미결정 항목)은 아직 확정하지 않았다.
 
 #### R4 — Mobile 앱 ✅ 완료
@@ -114,11 +114,11 @@ PDD의 Phase 1/2/3을 **독립적으로 완료·검증 가능한 라운드**로 
   - NativeWind v4 는 Tailwind v3 를 peer 로 요구하므로 `apps/mobile` 은 `tailwindcss@^3` 를 사용한다. 공용 preset(`config-tailwind`)의 `theme.extend` 형태가 v3/v4 호환이라 web(Tailwind v4)과 동일 토큰을 공유한다. RN 특성상 배경색은 View/Pressable, 글자색은 Text 에 분리 적용한다.
   - **카메라 촬영이 메인 입력**(사용자 결정, 근거: 모바일에서 전성분 표시면을 즉석 촬영하는 흐름이 1차 진입점): `features/analyze-ingredients`의 `CameraCapture`가 `expo-camera` `CameraView` 라이브 프리뷰를 히어로로 띄우고 셔터로 `takePictureAsync` → `{ uri, name, type }` 이미지로 이미지 분석 경로 재사용. 이미지 업로드/텍스트 입력은 보조 모드(mode: `camera`(기본) | `upload` | `text`). 권한 미허용 시 프리뷰 대신 `useCameraPermissions` 기반 권한 요청 UI 표시. 앱 진입 화면(`AnalyzePage`)은 ScrollView 대신 flex 컬럼으로 바꿔 프리뷰가 화면을 채운다.
   - 이미지 업로드는 expo-image-picker 자산 `{ uri, name, type }` 을 RN `FormData` 파트로 전달한다(웹의 `Blob` 과 다름). `api-client` wrapper 는 무수정 재사용하고 호출부에서 캐스팅한다. 카메라 촬영도 동일 `{ uri, name, type }` 형태로 같은 경로를 탄다.
-  - **모노레포 pnpm ↔ Expo/Metro 정합화**: Expo 공식 가이드에 따라 루트 `.npmrc` 에 `node-linker=hoisted` 를 적용했다. 또한 web(react `^19.2`)과 Expo(react `19.1.0`) 의 React 중복으로 react-query 훅이 깨져, 루트 `pnpm.overrides` 로 `react`/`react-dom` 을 `19.1.0` 으로 단일화했다(web 회귀 없음: type-check·15 테스트 통과 확인).
+  - **모노레포 pnpm ↔ Expo/Metro 정합화**: Expo 공식 가이드에 따라 루트 `.npmrc` 에 `node-linker=hoisted` 를 적용했다. React 중복으로 react-query 훅이 깨지지 않도록 Web/Mobile 선언과 루트 `pnpm.overrides`의 `react`/`react-dom`을 Expo 요구 버전 `19.1.0`으로 단일화했다(web 회귀 없음: type-check·15 테스트 통과 확인).
   - 상태 검증: `jest`(20, 카메라 촬영 3케이스 포함) 통과, `eslint`(boundaries) 통과, `steiger` 통과, `expo export`(iOS) Metro 번들 성공(라우트 누락 경고 없음). **시뮬레이터 부팅 및 실기기 연동은 이 환경에서 미실행** — 특히 **카메라 라이브 프리뷰/셔터는 시뮬레이터에 카메라 하드웨어가 없어 실기기 확인이 필수**다. 번들·단위 테스트(카메라 네이티브 모듈 mock)로 배선을 검증했다.
   - 카메라 테스트는 `expo-camera`를 mock 하며, `CameraView` mock 은 RN host 컴포넌트를 렌더하면 nativewind babel 변환과 충돌하므로 `null` 을 반환하고 `ref` 로 `takePictureAsync` 만 노출한다. `camera-view` testID 는 실제 컴포넌트의 프리뷰 래퍼에 둔다.
-  - 참고: 이 환경에서 `tsc --noEmit` 이 `global.css` side-effect import 타입 선언 누락(TS2882)으로 실패하나, 이는 신규 변경과 무관한 사전 존재 이슈(clean 트리에서도 재현)이며 카메라 신규 코드에는 타입 오류가 없다.
-  - web(R3)와 동일하게 ESLint 10 미대응인 `eslint-plugin-react`/`react-hooks` 는 제외했고(TypeScript strict + tseslint 로 대체), CJS 설정 파일(metro/babel/tailwind/jest)은 `require()` 허용 override 를 두었다. flat config(eslint/steiger)는 CJS 패키지에서 ESM 로드되도록 `.mjs` 로 둔다.
+  - R5에서 `global.css` side-effect import 선언(`global.d.ts`)을 추가해 `tsc --noEmit` TS2882를 해소했다.
+  - R5 재점검에서 ESLint 10 호환이 확인된 `eslint-plugin-react-hooks`는 재도입했다. `eslint-plugin-react` 7.37.5는 peer 범위가 ESLint 9까지라 계속 제외한다. CJS 설정 파일(metro/babel/tailwind/jest)은 `require()` 허용 override 를 두었고, flat config(eslint/steiger)는 CJS 패키지에서 ESM 로드되도록 `.mjs` 로 둔다.
 
 #### R5 — 품질/CI 파이프라인 🔄 진행중
 - 범위: 저장소 전반 품질 자동화 (PDD §11)
@@ -126,15 +126,19 @@ PDD의 Phase 1/2/3을 **독립적으로 완료·검증 가능한 라운드**로 
 - 선행: R1~R4
 - 완료 기준: CI 워크플로가 lint/test/type-check를 통과 / pre-commit 훅 동작
 - 비고(진행 상황):
-  - **CI/CD 워크플로 초안 작성 완료(초안 단계 — "완료" 아님)**: 모바일이 Expo Managed(네이티브 폴더 없음)라 배포는 EAS Build/Submit 경로를 기준으로 잡았고, 파이프라인을 (A) CI 품질 게이트와 (B) 모바일 CD 두 갈래로 분리했다. 트리거 브랜치는 `main` 이 아닌 **`prod`** 이며, 모노레포 경로 기반 선택 실행을 적용했다(사용자 결정).
-    - `.github/workflows/ci.yml`: 경로 기반 선택 CI. `changes` job(`dorny/paths-filter`)이 web/mobile/api/shared 변경을 감지하고, 각 앱 job 은 자기 경로 변경 또는 `shared`(루트 파일·`packages/**`) 변경 시 실행한다. 앱 job 은 turbo `--filter`(web/mobile)·`lint:fsd`(steiger)·mobile `expo export` 스모크, `packages` job(shared 시 `--filter=./packages/*`), `api` job(uv `sync`/`ruff`/`mypy`/`pytest`). node `.nvmrc`(22), pnpm 10.28.0. 트리거: PR + `prod` push.
-    - `.github/workflows/mobile-cd.yml`: `prod` push 시 `changes`(paths-filter)로 모바일 영향/네이티브 변경 감지 → `decide` job 이 분기: **네이티브 변경(apps/mobile/package.json·app.json·eas.json, pnpm-lock.yaml) O → `eas build`+`eas submit`, X → `eas update`(OTA)**, 모바일 무관 → 실행 안 함. 수동(`workflow_dispatch`)은 `mode`(auto/ota/build-submit)로 강제 가능(auto+수동은 OTA). `expo/expo-github-action`+`EXPO_TOKEN` 인증.
+  - **CI 품질 게이트 로컬 완성**: 트리거 브랜치는 `main` 이 아닌 **`prod`** 이며, 모노레포 경로 기반 선택 실행을 적용했다(사용자 결정).
+    - `.github/workflows/ci.yml`: `quality-config` job은 경로와 무관하게 저장소 품질 설정을 검증한다. `changes` job(`dorny/paths-filter`)은 web/mobile/api/shared 변경을 감지하고, 각 앱 job은 자기 경로 변경 또는 `shared`(루트 파일·`packages/**`) 변경 시 실행한다. 앱 job은 turbo `--filter`(web/mobile)·`lint:fsd`(steiger)·mobile `expo export` 스모크, `packages` job(shared 시 `--filter=./packages/*`), `api` job(uv `sync`/`ruff`/`mypy`/`pytest`)을 수행한다. node `.nvmrc`(22), pnpm 10.28.0. 트리거: PR + `prod` push.
+    - `actionlint` 1.7.12로 `ci.yml`/`mobile-cd.yml` 문법 검증 통과. `pnpm install --frozen-lockfile`과 CI 상당 명령을 로컬에서 모두 통과했다: Web Vitest 15, Mobile Jest 20, shared Vitest 2, API pytest 45, TS/Python lint·type-check, Web/Mobile FSD steiger, Expo iOS export.
+  - **로컬 훅 완성**: husky `prepare`, lint-staged, commitlint Conventional 설정을 추가했다. pre-commit은 Web/Mobile/packages ESLint, API ruff check/format, 공통 Prettier를 staged 파일에만 적용한다. 격리 Git 인덱스에서 pre-commit 성공을 확인했고, commit-msg는 유효한 `chore:` 메시지를 통과시키고 비규약 메시지를 거부한다.
+  - **테스트/타입/린트 구성 정리**: 품질 설정 계약 테스트 9개와 `shared-types` Vitest 2개를 추가했다. PDD의 TypeScript 5.x와 Expo React 19.1 계약에 맞춰 workspace 선언을 TypeScript 5.9.3/React 19.1로 정렬하고 peer 경고를 제거했으며, TS6 전용 `ignoreDeprecations: "6.0"` 옵션과 프로젝트 tsconfig의 `baseUrl`도 제거했다. Mobile CSS 선언 누락을 해소했고, Jest의 React Query mutation GC 타이머를 비활성화해 테스트 종료 hang을 제거했다. pnpm hoisted 환경에서 Zod v3/v4가 섞이지 않도록 React Hooks 하위 의존성을 v4로 고정해 Web type-check와 Hooks 로딩을 복구했다. `eslint-plugin-boundaries` v6의 `boundaries/dependencies` 객체 selector로 이전해 deprecated 경고를 제거하고 public API 경계를 유지한다.
+  - **R5 남은 완료 조건**: GitHub Actions 원격 실행 green 확인만 남았다. 2026-07-15 원격 조회 기준 현재 HEAD의 workflow run과 `prod` 브랜치가 없어 아직 실제 실행할 수 없으므로 R5 상태를 `🔄 진행중`으로 유지한다. 변경을 PR로 올리거나 `prod` 브랜치를 생성·push한 뒤 Actions green을 확인하면 `✅ 완료`로 전환한다.
+  - **모바일 CD는 별도 초안**: 모바일이 Expo Managed(네이티브 폴더 없음)라 EAS Build/Submit 경로를 기준으로 작성했으며, R5-CD2에서 실동작을 완성한다. R5-CD2 자격증명과 projectId가 준비되기 전에는 `prod` push에서 실패하지 않도록 `workflow_dispatch` 수동 실행만 허용한다.
+    - `.github/workflows/mobile-cd.yml`: R5-CD2에서 `prod` push 트리거를 활성화하면 `changes`(paths-filter)로 모바일 영향/네이티브 변경 감지 → `decide` job 이 분기한다. **네이티브 변경(apps/mobile/package.json·app.json·eas.json, pnpm-lock.yaml) O → `eas build`+`eas submit`, X → `eas update`(OTA)**, 모바일 무관 → 실행 안 함. 현재 수동(`workflow_dispatch`)은 `mode`(auto/ota/build-submit)로 강제 가능(auto+수동은 OTA). `expo/expo-github-action`+`EXPO_TOKEN` 인증.
     - `apps/mobile/eas.json`: development/preview/production build 프로파일 + submit 프로파일 초안(자격증명 자리 플레이스홀더).
     - `apps/mobile/app.json`: EAS 빌드에 필수인 `ios.bundleIdentifier`/`android.package` 를 플레이스홀더(`com.cosmeticsanalyzer.app`)로 추가 — **실제 값으로 교체 필요**.
-  - **R5 자체 미완(완료 기준 미충족)**: husky/lint-staged/Conventional Commits(commitlint) 로컬 훅 미도입. CI 를 GitHub 에서 실제로 돌려 green 확인(완료 기준) 미실행 — 초안 단계. `prod` 브랜치 생성/운영 정책도 미정.
   - **배포(CD)는 R5 범위에서 분리**(사용자 결정, 근거: R5 는 문서상 "CI 품질 게이트 + 로컬 훅"까지가 범위이고 배포는 별개 인프라 작업이며 배포 플랫폼이 미결정 항목이라 라운드로 분리 추적한다): 위 `mobile-cd.yml`/`eas.json`/`app.json` 초안과 실 자격증명·`eas init` 작업은 신설 **R5-CD2(모바일 배포)** 로 이관해 추적한다. 웹/백엔드 배포 CD 는 신설 **R5-CD1(웹/백엔드 배포)** 로 다룬다. R5 자체 완료 기준은 CI 품질 게이트 green + 로컬 훅으로 한정한다.
-  - 자격증명·시크릿 값은 `.env` 등 파일로 만들지 않고 GitHub Actions Secrets/Variables 로만 참조한다(사용자 요청). 필요한 항목: Secret `EXPO_TOKEN`, Variable `EXPO_PUBLIC_API_BASE_URL`.
-  - R3/R4 비고와 동일하게 ESLint 10 미대응 `eslint-plugin-react`/`react-hooks` 는 제외 상태이며 대응 버전 출시 시 재도입 재점검.
+  - CI/CD 실행 자격증명·시크릿의 **실제 값**은 GitHub Actions Secrets/Variables 로만 참조한다. 필요한 항목: Secret `EXPO_TOKEN`, Variable `EXPO_PUBLIC_API_BASE_URL`. 다만 로컬 개발용 `.env` 에는 워크플로가 참조하는 변수를 **플레이스홀더(`<...>`)로** 문서화해 둔다(사용자 결정, 2026-07-15, 근거: 워크플로가 어떤 변수를 쓰는지 로컬에서도 한눈에 파악·주입할 수 있게 함). 실제 시크릿 값은 여전히 `.env` 에 넣지 않으며, `apps/mobile/.env` 는 gitignore 대상이라 커밋되지 않는다. 현재 `apps/mobile/.env`(및 `.env.example`)에 `EXPO_TOKEN=<expo-access-token>` 플레이스홀더를 추가했다.
+  - ESLint 10 재점검 결과 `react-hooks` 7.1.1과 `react-refresh` 0.4.26은 재도입했고, peer 범위가 ESLint 9까지인 `eslint-plugin-react` 7.37.5만 제외 상태다.
 
 #### R5-CD1 — 웹/백엔드 배포(CD) ⏳ 대기
 - 범위: `apps/web` 정적 배포 + `apps/api` 컨테이너 배포 CD 워크플로 (`prod` push 트리거, CI 와 동일한 경로 기반 선택 실행)

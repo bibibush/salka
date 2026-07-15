@@ -6,20 +6,10 @@
     "declarationMap": false,
     "sourceMap": false,
     "jsx": "react-jsx",
-    "baseUrl": ".",
     "paths": {
-      "@/*": [
-        "./src/*"
-      ]
+      "@/*": ["./src/*"]
     },
-    "types": [
-      "jest",
-      "node"
-    ]
+    "types": ["jest", "node"]
   },
-  "include": [
-    "src",
-    "nativewind-env.d.ts",
-    "*.config.js"
-  ]
+  "include": ["src", "global.d.ts", "nativewind-env.d.ts", "*.config.js"]
 }

@@ -34,7 +34,15 @@ export function fsdBoundariesConfig(options = {}) {
     if (layer === 'shared') {
       allow.push('shared');
     }
-    return { from: [layer], allow };
+    return {
+      from: { type: layer },
+      allow: {
+        to: {
+          type: allow,
+          internalPath: ['index.ts', 'index.tsx', 'index.js', 'index.jsx'],
+        },
+      },
+    };
   });
 
   return [
@@ -46,12 +54,7 @@ export function fsdBoundariesConfig(options = {}) {
         'boundaries/elements': elements,
       },
       rules: {
-        'boundaries/element-types': [
-          'error',
-          { default: 'disallow', rules },
-        ],
-        // 같은 레이어 내 다른 슬라이스 직접 참조 금지 (public API 경유 강제)
-        'boundaries/no-private': ['error', { allowUncles: false }],
+        'boundaries/dependencies': ['error', { default: 'disallow', rules }],
       },
     },
   ];

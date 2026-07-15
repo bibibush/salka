@@ -1,5 +1,5 @@
 # =============================================================================
-# (A) CI — 품질 게이트 파이프라인 [R5 초안 / DRAFT]
+# (A) CI — 품질 게이트 파이프라인 [R5]
 # -----------------------------------------------------------------------------
 # 모노레포 경로 기반 선택 실행:
 #   - 특정 앱(apps/web | apps/mobile | apps/api)만 변경 → 해당 앱 job 만 실행
@@ -8,8 +8,8 @@
 # 트리거: PR(모든 대상) + prod 브랜치 push.
 # 변경 경로 감지는 dorny/paths-filter 로 한 곳(changes job)에서 관리한다.
 #
-# 참고(R3/R4 비고와 동일): ESLint 10 미대응으로 eslint-plugin-react /
-# react-hooks 는 제외된 상태이며, 대응 버전 출시 시 재도입한다.
+# React Hooks/Refresh 규칙은 ESLint 10 호환 버전을 적용한다. eslint-plugin-react는
+# 현재 버전의 peer 범위가 ESLint 9까지라 제외한다.
 # 필요 시크릿/변수: 없음(품질 검증은 외부 자격증명 불필요).
 # =============================================================================
 name: CI
@@ -24,6 +24,22 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # 저장소 품질 설정 자체는 변경 경로와 무관하게 항상 검증한다.
+  quality-config:
+    name: quality config
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test:quality
+
   # ---------------------------------------------------------------------------
   # 변경 경로 감지 — 어떤 앱을 돌릴지 결정한다.
   # shared(루트/packages) 가 바뀌면 모든 앱을 돌린다.
@@ -153,8 +169,8 @@ jobs:
         uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
-          python-version: "3.12"
+          python-version: '3.12'
       - run: uv sync
       - run: uv run ruff check .
-      - run: uv run mypy
+      - run: uv run mypy src
       - run: uv run pytest

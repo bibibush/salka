@@ -9,15 +9,35 @@
   "scripts": {
     "build": "turbo run build",
     "lint": "turbo run lint",
-    "test": "turbo run test",
-    "type-check": "turbo run type-check"
+    "test": "pnpm test:quality && turbo run test",
+    "test:quality": "node --test tests/quality-config.test.mjs",
+    "type-check": "turbo run type-check",
+    "prepare": "husky"
   },
   "devDependencies": {
-    "turbo": "^2.3.0"
+    "@commitlint/cli": "^21.2.1",
+    "@commitlint/config-conventional": "^21.2.0",
+    "@types/react": "~19.1.17",
+    "@types/react-dom": "~19.1.11",
+    "eslint": "^10.5.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^17.0.8",
+    "prettier": "^3.9.5",
+    "turbo": "^2.3.0",
+    "typescript": "^5.9.3",
+    "zod": "^4.4.3",
+    "zod-validation-error": "^4.0.2"
   },
   "pnpm": {
-    "onlyBuiltDependencies": ["esbuild", "unrs-resolver"],
+    "onlyBuiltDependencies": [
+      "esbuild",
+      "unrs-resolver"
+    ],
     "overrides": {
+      "@types/react": "19.1.17",
+      "@types/react-dom": "19.1.11",
+      "eslint-plugin-react-hooks>zod": "^4.4.3",
+      "eslint-plugin-react-hooks>zod-validation-error": "^4.0.2",
       "react": "19.1.0",
       "react-dom": "19.1.0"
     }

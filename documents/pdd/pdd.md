@@ -385,6 +385,7 @@ E2E(Detox / Playwright)는 Phase 2 이후 도입 검토.
 ### Mobile (`apps/mobile/.env`)
 
 - `EXPO_PUBLIC_API_BASE_URL`
+- `EXPO_TOKEN` - EAS CLI 인증용. 로컬 파일에는 `<expo-access-token>` 플레이스홀더만 문서화하고, CI 실제 값은 GitHub Actions `Secrets.EXPO_TOKEN`으로만 주입한다. (결정 근거: 워크플로가 요구하는 변수를 로컬에서도 식별할 수 있게 하되 실제 시크릿은 저장소와 분리한다.)
 
 ### Web (`apps/web/.env`)
 

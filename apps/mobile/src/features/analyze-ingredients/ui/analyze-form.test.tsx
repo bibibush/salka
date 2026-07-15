@@ -55,7 +55,9 @@ const result: AnalysisResult = {
 };
 
 function renderForm(onAnalyzed?: () => void) {
-  const queryClient = new QueryClient({ defaultOptions: { mutations: { retry: false } } });
+  const queryClient = new QueryClient({
+    defaultOptions: { mutations: { retry: false, gcTime: Infinity } },
+  });
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
   );
