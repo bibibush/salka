@@ -131,9 +131,25 @@ PDD의 Phase 1/2/3을 **독립적으로 완료·검증 가능한 라운드**로 
     - `.github/workflows/mobile-cd.yml`: `prod` push 시 `changes`(paths-filter)로 모바일 영향/네이티브 변경 감지 → `decide` job 이 분기: **네이티브 변경(apps/mobile/package.json·app.json·eas.json, pnpm-lock.yaml) O → `eas build`+`eas submit`, X → `eas update`(OTA)**, 모바일 무관 → 실행 안 함. 수동(`workflow_dispatch`)은 `mode`(auto/ota/build-submit)로 강제 가능(auto+수동은 OTA). `expo/expo-github-action`+`EXPO_TOKEN` 인증.
     - `apps/mobile/eas.json`: development/preview/production build 프로파일 + submit 프로파일 초안(자격증명 자리 플레이스홀더).
     - `apps/mobile/app.json`: EAS 빌드에 필수인 `ios.bundleIdentifier`/`android.package` 를 플레이스홀더(`com.cosmeticsanalyzer.app`)로 추가 — **실제 값으로 교체 필요**.
-  - **미완(완료 기준 미충족)**: husky/lint-staged/Conventional Commits(commitlint) 로컬 훅 미도입. 실제 EAS 자격증명(EXPO_TOKEN, App Store Connect API Key, Google Play 서비스 계정)·`eas init`(projectId) 미설정. CI 를 GitHub 에서 실제로 돌려 green 확인(완료 기준) 미실행 — 초안 단계. `prod` 브랜치 생성/운영 정책도 미정.
+  - **R5 자체 미완(완료 기준 미충족)**: husky/lint-staged/Conventional Commits(commitlint) 로컬 훅 미도입. CI 를 GitHub 에서 실제로 돌려 green 확인(완료 기준) 미실행 — 초안 단계. `prod` 브랜치 생성/운영 정책도 미정.
+  - **배포(CD)는 R5 범위에서 분리**(사용자 결정, 근거: R5 는 문서상 "CI 품질 게이트 + 로컬 훅"까지가 범위이고 배포는 별개 인프라 작업이며 배포 플랫폼이 미결정 항목이라 라운드로 분리 추적한다): 위 `mobile-cd.yml`/`eas.json`/`app.json` 초안과 실 자격증명·`eas init` 작업은 신설 **R5-CD2(모바일 배포)** 로 이관해 추적한다. 웹/백엔드 배포 CD 는 신설 **R5-CD1(웹/백엔드 배포)** 로 다룬다. R5 자체 완료 기준은 CI 품질 게이트 green + 로컬 훅으로 한정한다.
   - 자격증명·시크릿 값은 `.env` 등 파일로 만들지 않고 GitHub Actions Secrets/Variables 로만 참조한다(사용자 요청). 필요한 항목: Secret `EXPO_TOKEN`, Variable `EXPO_PUBLIC_API_BASE_URL`.
   - R3/R4 비고와 동일하게 ESLint 10 미대응 `eslint-plugin-react`/`react-hooks` 는 제외 상태이며 대응 버전 출시 시 재도입 재점검.
+
+#### R5-CD1 — 웹/백엔드 배포(CD) ⏳ 대기
+- 범위: `apps/web` 정적 배포 + `apps/api` 컨테이너 배포 CD 워크플로 (`prod` push 트리거, CI 와 동일한 경로 기반 선택 실행)
+- 산출물: `.github/workflows/web-cd.yml`(정적 호스팅 배포), `.github/workflows/api-cd.yml`(Docker 이미지 빌드 → 배포 플랫폼). 자격증명·시크릿은 `.env` 등 파일로 만들지 않고 GitHub Actions Secrets/Variables 로만 참조한다.
+- 선행: R5 완료, **웹 배포 플랫폼 결정**(미결정 항목), **백엔드 배포 플랫폼 결정**(미결정 항목)
+- 완료 기준: `prod` push 시 웹·백엔드 CD 가 실제 배포까지 성공(green)
+- 비고: 배포 플랫폼 결정이 선행이라 결정 전에는 착수하지 않는다. PDD §2.6 인프라(웹=정적 호스팅, 백엔드=Docker 컨테이너)를 기준으로 한다.
+
+#### R5-CD2 — 모바일 배포(CD) ⏳ 대기
+- 범위: R5 에서 작성된 `mobile-cd.yml`(EAS build/submit/update, `prod` push 시 네이티브 변경 여부로 분기) 초안을 실동작까지 완성
+- 산출물: (초안 존재) `mobile-cd.yml`/`eas.json` 에 실 자격증명 연결, `eas init`(projectId) 설정, `app.json` 의 `ios.bundleIdentifier`/`android.package` 플레이스홀더(`com.cosmeticsanalyzer.app`)를 실제 값으로 교체
+- 선행: R5 완료, EAS 자격증명 확보 — Secret `EXPO_TOKEN`·App Store Connect API Key·Google Play 서비스 계정, Variable `EXPO_PUBLIC_API_BASE_URL`
+- 완료 기준: `prod` push 시 네이티브 변경 여부에 따른 분기(OTA `eas update` vs `eas build`+`eas submit`)가 실제 동작
+
+> 참고: R5-CD1/R5-CD2 는 Phase 1 산출물을 배포하기 위한 인프라 라운드로 R5 다음에 둔다. 다만 배포 플랫폼 결정·자격증명 확보에 의존하므로, 이들이 지연되면 Phase 2 기능 라운드(R6~)와 병행하거나 후행할 수 있다. Phase 2 기능 라운드는 배포(CD) 완료를 강제 선행으로 두지 않는다.
 
 ### Phase 2 (사용자 명시 요청 시에만 시작)
 
@@ -170,6 +186,7 @@ PDD의 Phase 1/2/3을 **독립적으로 완료·검증 가능한 라운드**로 
 항목이 확정되면 「작업 원칙」의 PDD 갱신 규칙에 따라 즉시 PDD에 반영하고 본 목록에서 제거한다.
 
 - 바코드 -> 제품 매핑 소스
+- 웹 배포 플랫폼 (정적 호스팅: Vercel / Cloudflare Pages 등)
 - 백엔드 배포 플랫폼
 - 분석 결과 캐싱 정책
 - 에러 모니터링 도구
