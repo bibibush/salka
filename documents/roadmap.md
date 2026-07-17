@@ -85,12 +85,17 @@ PDD의 Phase 1/2/3을 **독립적으로 완료·검증 가능한 라운드**로 
   - CI/CD 실행 자격증명·시크릿의 **실제 값**은 GitHub Actions Secrets/Variables 로만 참조한다. 필요한 항목: Secret `EXPO_TOKEN`, Variable `EXPO_PUBLIC_API_BASE_URL`. 다만 로컬 개발용 `.env` 에는 워크플로가 참조하는 변수를 **플레이스홀더(`<...>`)로** 문서화해 둔다(사용자 결정, 2026-07-15, 근거: 워크플로가 어떤 변수를 쓰는지 로컬에서도 한눈에 파악·주입할 수 있게 함). 실제 시크릿 값은 여전히 `.env` 에 넣지 않으며, `apps/mobile/.env` 는 gitignore 대상이라 커밋되지 않는다. 현재 `apps/mobile/.env`(및 `.env.example`)에 `EXPO_TOKEN=<expo-access-token>` 플레이스홀더를 추가했다.
   - ESLint 10 재점검 결과 `react-hooks` 7.1.1과 `react-refresh` 0.4.26은 재도입했고, peer 범위가 ESLint 9까지인 `eslint-plugin-react` 7.37.5만 제외 상태다.
 
-#### R5-CD1 — 웹/백엔드 배포(CD) ⏳ 대기
+#### R5-CD1 — 웹/백엔드 배포(CD) ✅ 완료
 - 범위: `apps/web` 정적 배포 + `apps/api` 컨테이너 배포 CD 워크플로 (`prod` push 트리거, CI 와 동일한 경로 기반 선택 실행)
-- 산출물: `.github/workflows/web-cd.yml`(정적 호스팅 배포), `.github/workflows/api-cd.yml`(Docker 이미지 빌드 → 배포 플랫폼). 자격증명·시크릿은 `.env` 등 파일로 만들지 않고 GitHub Actions Secrets/Variables 로만 참조한다.
-- 선행: R5 완료, **웹 배포 플랫폼 결정**(미결정 항목), **백엔드 배포 플랫폼 결정**(미결정 항목)
+- 산출물: `.github/workflows/web-cd.yml`(정적 호스팅 배포), `.github/workflows/api-cd.yml`(Docker 이미지 빌드 → 배포 플랫폼). 자격증명·시크릿의 **실제 값**은 `.env` 등 파일로 만들지 않고 GitHub Actions Secrets/Variables 로만 참조한다.
+- 선행: R5 완료, ~~웹 배포 플랫폼 결정~~(확정: **AWS S3 + CloudFront**, 2026-07-18), ~~백엔드 배포 플랫폼 결정~~(확정: **Docker/GHCR → SSH 자체 서버**, 2026-07-18)
 - 완료 기준: `prod` push 시 웹·백엔드 CD 가 실제 배포까지 성공(green)
-- 비고: 배포 플랫폼 결정이 선행이라 결정 전에는 착수하지 않는다. PDD §2.6 인프라(웹=정적 호스팅, 백엔드=Docker 컨테이너)를 기준으로 한다.
+- 비고(완료 내역):
+  - **플랫폼 결정(사용자, 2026-07-18)**: 웹=AWS **S3**(정적 호스팅) + **CloudFront**(edge/CDN), 백엔드=Docker 이미지를 **GHCR** push 후 **자체 서버에 SSH pull/run**. 근거: 사용자가 자체 서버(호스트/ssh키) 기반 백엔드 배포와 S3+CloudFront edge 웹 배포를 지정. 두 항목은 미결정 목록에서 제거하고 PDD §2.6·§15·CD 표에 반영했다.
+  - **웹 CD**(`web-cd.yml`): `prod` push(경로 diff) + `workflow_dispatch`. `pnpm turbo run build --filter=web` → `aws s3 sync apps/web/dist`(에셋 immutable 캐시, `index.html` no-cache 분리) → `aws cloudfront create-invalidation --paths "/*"`. AWS 자격증명은 `aws-actions/configure-aws-credentials`(access key 시크릿).
+  - **백엔드 CD**(`api-cd.yml`): `prod` push(경로 diff) + `workflow_dispatch`. `docker/build-push-action` 으로 `apps/api/Dockerfile` 빌드 → GHCR(`ghcr.io/<owner>/api:<sha>`, `:latest`) push(실행 시 유효한 `GITHUB_TOKEN` 인증, 별도 레지스트리 시크릿 불필요) → `appleboy/ssh-action` 으로 자체 서버 접속해 pull/run(`docker run --restart unless-stopped -p 8000:8000 --env-file <API_ENV_FILE>`). 런타임 시크릿(`LLM_API_KEY`/`OCR_API_KEY` 등)은 서버 env-file 로만 주입한다.
+  - **플레이스홀더 처리(사용자 지시)**: 호스트·SSH키·AWS 자격증명 등 모르는 값은 워크플로에 literal 로 두지 않고 `${{ secrets.* }}`/`${{ vars.* }}` 참조로만 두었다. 로컬 `.env`/`.env.example`(`apps/web`, `apps/api`)에는 워크플로가 참조하는 변수를 `<...>` 플레이스홀더로 문서화했다(실제 값은 넣지 않음). 사용자가 GitHub 에 등록해야 하는 값: Secret `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`·`DEPLOY_SSH_HOST`/`DEPLOY_SSH_USER`/`DEPLOY_SSH_KEY`, Variable `AWS_REGION`/`WEB_S3_BUCKET`/`CLOUDFRONT_DISTRIBUTION_ID`/`VITE_API_BASE_URL`/`DEPLOY_SSH_PORT`/`API_ENV_FILE`.
+  - **상태 검증**: 품질 계약 테스트 4개 추가(웹/백엔드 CD 트리거·핵심 스텝·시크릿 참조·literal 자격증명 금지·`.env` 플레이스홀더) → `pnpm test:quality` 13개 green. `actionlint` 1.7.12 로 두 워크플로 문법 통과. `pnpm turbo run build --filter=web` 로 `apps/web/dist` 산출 확인. **실제 배포(prod push green)는 사용자가 GitHub Secrets/Variables 와 서버(자체 서버·S3·CloudFront)를 준비한 뒤 검증해야 한다** — 이 환경에서는 자격증명·인프라 부재로 미실행.
 
 #### R5-CD2 — 모바일 배포(CD) ⏳ 대기
 - 범위: R5 에서 작성된 `mobile-cd.yml`(EAS build/submit/update, `prod` push 시 네이티브 변경 여부로 분기) 초안을 실동작까지 완성
@@ -135,8 +140,6 @@ PDD의 Phase 1/2/3을 **독립적으로 완료·검증 가능한 라운드**로 
 항목이 확정되면 `AGENTS.md` 「작업 원칙」의 PDD 갱신 규칙에 따라 즉시 PDD에 반영하고 본 목록에서 제거한다.
 
 - 바코드 -> 제품 매핑 소스
-- 웹 배포 플랫폼 (정적 호스팅: Vercel / Cloudflare Pages 등)
-- 백엔드 배포 플랫폼
 - 분석 결과 캐싱 정책
 - 에러 모니터링 도구
 - E2E 테스트 도입 시점

@@ -111,6 +111,84 @@ test('unfinished Mobile CD remains manual until R5-CD2 credentials are ready', a
   assert.doesNotMatch(triggerBlock, /^  push:/m);
 });
 
+test('Web CD deploys the static build to S3 + CloudFront on prod push [R5-CD1]', async () => {
+  const workflow = await readFile(new URL('.github/workflows/web-cd.yml', rootUrl), 'utf8');
+  const triggerBlock = workflow.match(/^on:\n([\s\S]*?)\n\nconcurrency:/m)?.[1];
+
+  assert.ok(triggerBlock, 'Web CD trigger block not found');
+  assert.doesNotMatch(workflow, /DRAFT|초안/);
+  // prod push + 수동 실행 두 트리거 모두 지원
+  assert.match(triggerBlock, /^  push:/m);
+  assert.match(triggerBlock, /branches:\s*\[prod\]/);
+  assert.match(triggerBlock, /^  workflow_dispatch:/m);
+  // 정적 빌드 → S3 sync → CloudFront 무효화
+  assert.match(workflow, /turbo run build --filter=web/);
+  assert.match(workflow, /aws s3 sync/);
+  assert.match(workflow, /cloudfront create-invalidation/);
+  // AWS 자격증명은 시크릿/변수 참조로만 주입한다(literal 값 금지).
+  assert.match(workflow, /secrets\.AWS_ACCESS_KEY_ID/);
+  assert.match(workflow, /secrets\.AWS_SECRET_ACCESS_KEY/);
+  assert.match(workflow, /vars\.WEB_S3_BUCKET/);
+  assert.match(workflow, /vars\.CLOUDFRONT_DISTRIBUTION_ID/);
+});
+
+test('API CD builds a Docker image and deploys it over SSH on prod push [R5-CD1]', async () => {
+  const workflow = await readFile(new URL('.github/workflows/api-cd.yml', rootUrl), 'utf8');
+  const triggerBlock = workflow.match(/^on:\n([\s\S]*?)\n\nconcurrency:/m)?.[1];
+
+  assert.ok(triggerBlock, 'API CD trigger block not found');
+  assert.doesNotMatch(workflow, /DRAFT|초안/);
+  assert.match(triggerBlock, /^  push:/m);
+  assert.match(triggerBlock, /branches:\s*\[prod\]/);
+  assert.match(triggerBlock, /^  workflow_dispatch:/m);
+  // 이미지 빌드/푸시 + SSH 배포
+  assert.match(workflow, /docker\/build-push-action/);
+  assert.match(workflow, /appleboy\/ssh-action/);
+  // 호스트/키는 시크릿 참조로만 주입한다(literal 값 금지).
+  assert.match(workflow, /secrets\.DEPLOY_SSH_HOST/);
+  assert.match(workflow, /secrets\.DEPLOY_SSH_KEY/);
+  assert.match(workflow, /secrets\.DEPLOY_SSH_USER/);
+});
+
+test('CD workflows never commit literal hosts or credentials [R5-CD1]', async () => {
+  for (const name of ['web-cd.yml', 'api-cd.yml']) {
+    const workflow = await readFile(new URL(`.github/workflows/${name}`, rootUrl), 'utf8');
+    // 실제 IP/도메인/키가 아니라 시크릿/변수 참조만 사용해야 한다.
+    assert.doesNotMatch(
+      workflow,
+      /\b\d{1,3}(?:\.\d{1,3}){3}\b/,
+      `${name} must not embed a literal IP`,
+    );
+    assert.doesNotMatch(
+      workflow,
+      /-----BEGIN [A-Z ]*PRIVATE KEY-----/,
+      `${name} must not embed a private key`,
+    );
+  }
+});
+
+test('local .env files document CD variables as <...> placeholders [R5-CD1]', async () => {
+  const webEnv = await readFile(new URL('apps/web/.env.example', rootUrl), 'utf8');
+  const apiEnv = await readFile(new URL('apps/api/.env.example', rootUrl), 'utf8');
+
+  // 웹 CD(S3 + CloudFront)가 참조하는 값들을 플레이스홀더로 문서화
+  for (const key of ['WEB_S3_BUCKET', 'CLOUDFRONT_DISTRIBUTION_ID', 'AWS_ACCESS_KEY_ID']) {
+    assert.match(
+      webEnv,
+      new RegExp(`${key}=<[^>]+>`),
+      `apps/web/.env.example must document ${key}`,
+    );
+  }
+  // API CD(SSH 배포)가 참조하는 값들을 플레이스홀더로 문서화
+  for (const key of ['DEPLOY_SSH_HOST', 'DEPLOY_SSH_KEY']) {
+    assert.match(
+      apiEnv,
+      new RegExp(`${key}=<[^>]+>`),
+      `apps/api/.env.example must document ${key}`,
+    );
+  }
+});
+
 test('shared TypeScript packages execute a real Vitest suite', async () => {
   const packageJson = await readJson('packages/shared-types/package.json');
 

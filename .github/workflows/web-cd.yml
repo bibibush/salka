@@ -1,0 +1,117 @@
+# =============================================================================
+# (C) 웹 CD — AWS S3 + CloudFront [R5-CD1]
+# -----------------------------------------------------------------------------
+# apps/web(Vite 정적 빌드)를 S3 버킷에 업로드하고 CloudFront(edge)를 무효화한다.
+# CI 와 동일하게 모노레포 경로 기반 선택 실행을 적용한다:
+#   - apps/web 변경 또는 shared(루트 파일·packages/**) 변경 시에만 배포한다.
+#   - 그 외 변경(예: apps/api 만 변경)에는 아무것도 하지 않는다.
+#
+# 트리거: prod 브랜치 push + 수동 실행(workflow_dispatch).
+#   - push  : 경로 diff 로 배포 여부를 결정한다.
+#   - manual: diff 기준이 없으므로 항상 배포한다.
+#
+# -----------------------------------------------------------------------------
+# 사용자가 GitHub 에 사전 등록해야 하는 값 (실제 값은 여기 커밋하지 않는다):
+#   [Secrets]
+#     AWS_ACCESS_KEY_ID       S3 업로드/CloudFront 무효화 권한을 가진 액세스 키
+#     AWS_SECRET_ACCESS_KEY   위 키의 시크릿
+#   [Variables]
+#     AWS_REGION                  S3 버킷 리전 (예: ap-northeast-2)
+#     WEB_S3_BUCKET               정적 파일을 올릴 S3 버킷 이름
+#     CLOUDFRONT_DISTRIBUTION_ID  edge 캐시를 무효화할 CloudFront 배포 ID
+#     VITE_API_BASE_URL           프로덕션 백엔드 베이스 URL(빌드 타임 주입)
+# 로컬에서는 apps/web/.env(.example) 에 위 값들을 <...> 플레이스홀더로 문서화한다.
+# =============================================================================
+name: Web CD (S3 + CloudFront)
+
+on:
+  push:
+    branches: [prod]
+  workflow_dispatch:
+
+concurrency:
+  group: web-cd-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # push 시에만 경로 diff 로 배포 대상 여부를 판단한다.
+  # (workflow_dispatch 는 diff 기준이 없어 이 job 을 건너뛰고 항상 배포한다.)
+  # ---------------------------------------------------------------------------
+  changes:
+    name: Detect changes
+    if: ${{ github.event_name == 'push' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      web: ${{ steps.filter.outputs.web }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            web:
+              - 'apps/web/**'
+              - 'packages/**'
+              - 'package.json'
+              - 'pnpm-lock.yaml'
+              - 'pnpm-workspace.yaml'
+              - 'turbo.json'
+              - '.npmrc'
+              - '.nvmrc'
+              - 'tsconfig*.json'
+              - '.github/workflows/web-cd.yml'
+
+  deploy:
+    name: Build & deploy (S3 + CloudFront)
+    needs: changes
+    # 수동 실행이거나(항상), push 이면서 web/shared 변경이 있을 때만 배포한다.
+    if: >-
+      ${{ always() &&
+          (github.event_name == 'workflow_dispatch' ||
+           needs.changes.outputs.web == 'true') }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      # turbo 가 ^build 로 의존 패키지(dist)를 먼저 빌드한다.
+      - name: Build web (static)
+        run: pnpm turbo run build --filter=web
+        env:
+          VITE_API_BASE_URL: ${{ vars.VITE_API_BASE_URL }}
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      # 해시가 붙은 정적 에셋은 장기 캐시, index.html 은 no-cache 로 올린다.
+      - name: Sync assets to S3
+        run: |
+          aws s3 sync apps/web/dist "s3://${{ vars.WEB_S3_BUCKET }}" \
+            --delete \
+            --exclude "index.html" \
+            --cache-control "public,max-age=31536000,immutable"
+          aws s3 cp apps/web/dist/index.html "s3://${{ vars.WEB_S3_BUCKET }}/index.html" \
+            --cache-control "no-cache"
+
+      # edge(CloudFront) 캐시를 무효화해 새 배포를 즉시 반영한다.
+      - name: Invalidate CloudFront (edge)
+        run: |
+          aws cloudfront create-invalidation \
+            --distribution-id "${{ vars.CLOUDFRONT_DISTRIBUTION_ID }}" \
+            --paths "/*"
