@@ -150,6 +150,56 @@ test('API CD builds a Docker image and deploys it over SSH on prod push [R5-CD1]
   assert.match(workflow, /secrets\.DEPLOY_SSH_USER/);
 });
 
+test('API CD injects prod runtime config from GitHub Secrets/Variables at deploy time [R5-CD1]', async () => {
+  const workflow = await readFile(new URL('.github/workflows/api-cd.yml', rootUrl), 'utf8');
+
+  // 서버에 미리 둔 env-file 경로(API_ENV_FILE)에 의존하지 않는다.
+  assert.doesNotMatch(workflow, /API_ENV_FILE/, 'must not depend on a pre-placed server env-file');
+
+  // 운영 provider 선택은 Variables, 실제 키는 Secrets 로 주입한다.
+  assert.match(workflow, /vars\.LLM_PROVIDER/);
+  assert.match(workflow, /vars\.OCR_PROVIDER/);
+  assert.match(workflow, /secrets\.LLM_API_KEY/);
+  assert.match(workflow, /secrets\.OCR_API_KEY/);
+
+  // 배포 시점에 env-file 을 만들어 컨테이너에 주입한다(prod 환경).
+  assert.match(workflow, /ENV=prod/, 'container must run with ENV=prod');
+  assert.match(workflow, /--env-file/, 'runtime config must be passed via --env-file');
+});
+
+test('API CD registers its server block into the shared nginx and reloads it in place [R5-CD1]', async () => {
+  const workflow = await readFile(new URL('.github/workflows/api-cd.yml', rootUrl), 'utf8');
+
+  // 공용 nginx 는 8000 포트(SSL)로 listen 하고, api 컨테이너(8000)로 프록시한다.
+  assert.match(workflow, /listen\s+8000\s+ssl/, 'shared nginx must listen on port 8000 (ssl)');
+  assert.match(
+    workflow,
+    /proxy_pass\s+http:\/\/cosmetics-api:8000/,
+    'shared nginx must proxy to the api container on port 8000',
+  );
+  // 도메인·인증서 경로는 고정값으로 박아 넣는다(환경변수 불필요).
+  assert.match(
+    workflow,
+    /server_name\s+api\.agentops\.p-e\.kr/,
+    'nginx server_name must be the fixed backend domain',
+  );
+
+  // 새 nginx 를 세우지 않고, 공용 conf.d 에 이 앱 전용 server 블록만 배치한다.
+  assert.match(workflow, /conf\.d/, 'server block must live in the shared conf.d directory');
+  // api 컨테이너는 공용 프록시 네트워크에 join 해 컨테이너명으로 도달 가능해야 한다.
+  assert.match(workflow, /proxy_net/, 'api container must join the shared proxy network');
+
+  // 이미 떠 있는 공용 nginx 는 재시작/재생성이 아니라 무중단 reload 만 한다.
+  assert.match(workflow, /nginx -t/, 'nginx config must be validated before reload');
+  assert.match(workflow, /nginx -s reload/, 'shared nginx must be reloaded in place');
+  // 공용 nginx 를 이 워크플로가 직접 기동/정의하지 않는다(reload 만).
+  assert.doesNotMatch(
+    workflow,
+    /image:\s*nginx/,
+    'API CD must not define/start its own nginx; it only reloads the existing one',
+  );
+});
+
 test('CD workflows never commit literal hosts or credentials [R5-CD1]', async () => {
   for (const name of ['web-cd.yml', 'api-cd.yml']) {
     const workflow = await readFile(new URL(`.github/workflows/${name}`, rootUrl), 'utf8');

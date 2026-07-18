@@ -6,10 +6,10 @@
 from __future__ import annotations
 
 from functools import lru_cache
-from typing import ClassVar, Literal
+from typing import Annotated, ClassVar, Literal
 
 from pydantic import Field, field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 ProviderName = str
 
@@ -48,8 +48,10 @@ class Settings(BaseSettings):
     openai_reasoning_effort: ClassVar[Literal["minimal", "low", "medium", "high"]] = "medium"
     gemini_thinking_level: ClassVar[Literal["minimal", "low", "medium", "high"]] = "medium"
 
-    # CORS 허용 origin 화이트리스트
-    cors_origins: list[str] = Field(
+    # CORS 허용 origin 화이트리스트.
+    # NoDecode: pydantic-settings 가 env/dotenv 값을 JSON 으로 미리 디코딩하지 않도록
+    # 막아, 아래 `_split_cors_origins`(mode="before")가 콤마 문자열을 직접 분리한다.
+    cors_origins: Annotated[list[str], NoDecode] = Field(
         default_factory=lambda: [
             "http://localhost:3000",
             "http://localhost:5173",

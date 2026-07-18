@@ -17,12 +17,25 @@
 #     DEPLOY_SSH_HOST   배포 대상 서버 호스트(IP 또는 도메인)
 #     DEPLOY_SSH_USER   SSH 로그인 사용자
 #     DEPLOY_SSH_KEY    SSH 개인키(PEM). known_hosts 없이도 접속하도록 사용.
+#     LLM_API_KEY       운영 LLM(openai) API 키. provider=openai 일 때 필수.
+#     OCR_API_KEY       운영 OCR(gemini) API 키. provider=gemini 일 때 필수.
 #   [Variables]
 #     DEPLOY_SSH_PORT   SSH 포트(미설정 시 22)
-#     API_ENV_FILE      서버에 미리 둔 런타임 env-file 경로
-#                       (미설정 시 /opt/cosmetics-analyzer/api.env)
-#                       LLM_API_KEY/OCR_API_KEY 등 실제 런타임 시크릿은 이 서버
-#                       파일로만 주입하고 저장소/워크플로에 두지 않는다.
+#     LLM_PROVIDER      운영 LLM provider (미설정 시 openai)
+#     OCR_PROVIDER      운영 OCR provider (미설정 시 gemini)
+#     CORS_ORIGINS      운영 CORS 허용 origin(콤마 구분). 미설정 시 앱 기본값(localhost).
+#
+# 운영 런타임 값(ENV=prod + 위 provider/키/CORS)은 서버에 미리 둔 파일이 아니라,
+# 배포 시점에 위 Secrets/Variables 에서 임시 env-file 로 만들어 컨테이너에 주입하고
+# 생성 직후 삭제한다. 로컬(dev) 은 apps/api/.env 의 mock 기본값을 그대로 쓴다.
+#
+# nginx 는 새로 세우지 않는다. 이미 서버에서 동작 중인 공용 nginx 의 conf.d 에
+# 이 앱 전용 server 블록(cosmetics-api.conf: listen 8000 ssl, server_name
+# api.agentops.p-e.kr, proxy_pass http://cosmetics-api:8000)만 추가하고, 컨테이너를
+# 공용 proxy_net 에 join 시킨 뒤 nginx 를 무중단 reload 한다. 도메인·인증서 경로는
+# 서버에 고정돼 있어 상수로 두며, 다른 앱의 설정은 건드리지 않는다.
+# 전제: 공용 nginx 컨테이너(nginx_container)가 호스트 8000 포트를 게시하고,
+# /etc/letsencrypt/live/api.agentops.p-e.kr/ 인증서가 준비돼 있어야 한다.
 # GHCR push/pull 은 워크플로 실행 동안 유효한 GITHUB_TOKEN 으로 인증하므로
 # 별도 레지스트리 시크릿이 필요 없다.
 # 로컬에서는 apps/api/.env(.example) 에 위 값들을 <...> 플레이스홀더로 문서화한다.
@@ -104,7 +117,8 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      # 자체 서버에 SSH 로 접속해 새 이미지를 pull/run 한다.
+      # 자체 서버에 SSH 로 접속해 새 이미지를 pull/run 하고, 공용 nginx 에 이 앱의
+      # server 블록을 등록한 뒤 무중단 reload 한다.
       # GHCR pull 인증은 실행 동안 유효한 GITHUB_TOKEN 으로 서버에서 로그인해 처리한다.
       - name: Deploy over SSH
         uses: appleboy/ssh-action@v1
@@ -113,9 +127,39 @@ jobs:
           username: ${{ secrets.DEPLOY_SSH_USER }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
           port: ${{ vars.DEPLOY_SSH_PORT || 22 }}
-          envs: IMAGE_REF,GHCR_USER,GHCR_TOKEN,API_ENV_FILE
+          envs: IMAGE_REF,GHCR_USER,GHCR_TOKEN,APP_LLM_PROVIDER,APP_OCR_PROVIDER,APP_CORS_ORIGINS,APP_LLM_API_KEY,APP_OCR_API_KEY
           script: |
             set -euo pipefail
+
+            # 공용 인프라 값은 참조 설정과 동일하게 서버에 고정되어 있으므로 상수로 둔다.
+            NGINX_CONTAINER="nginx_container"
+            NGINX_CONF_DIR="$HOME/nginx/conf.d"
+            PROXY_NET="proxy_net"
+
+            # 운영 런타임 설정은 서버에 미리 둔 파일이 아니라, GitHub Secrets/Variables
+            # 에서 배포 시점에 주입해 임시 env-file 로 만든다(컨테이너 생성 후 즉시 삭제).
+            # provider 미지정 시 운영 기본값(openai/gemini)을 쓴다. 키는 시크릿에서만 온다.
+            ENV_FILE="$(mktemp)"
+            {
+              printf 'ENV=prod\n'
+              printf 'LLM_PROVIDER=%s\n' "${APP_LLM_PROVIDER:-openai}"
+              printf 'OCR_PROVIDER=%s\n' "${APP_OCR_PROVIDER:-gemini}"
+              printf 'LLM_API_KEY=%s\n' "${APP_LLM_API_KEY:-}"
+              printf 'OCR_API_KEY=%s\n' "${APP_OCR_API_KEY:-}"
+              if [ -n "${APP_CORS_ORIGINS:-}" ]; then
+                printf 'CORS_ORIGINS=%s\n' "$APP_CORS_ORIGINS"
+              fi
+            } > "$ENV_FILE"
+            chmod 600 "$ENV_FILE"
+
+            # 여러 애플리케이션이 공용으로 쓰는 nginx conf.d 디렉토리/프록시 네트워크
+            # (없으면 만들고, 있으면 그대로 둔다 — 다른 앱 설정은 건드리지 않는다).
+            mkdir -p "$NGINX_CONF_DIR"
+            docker network inspect "$PROXY_NET" >/dev/null 2>&1 || docker network create "$PROXY_NET"
+
+            # 새 이미지 pull → 컨테이너 교체. 공용 nginx 가 컨테이너명으로 도달할 수
+            # 있도록 proxy_net 에 join 한다. 공개 노출은 nginx(8000/SSL)가 담당하므로
+            # 백엔드는 호스트 포트를 직접 게시하지 않는다.
             echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
             docker pull "$IMAGE_REF"
             docker stop cosmetics-api 2>/dev/null || true
@@ -123,12 +167,55 @@ jobs:
             docker run -d \
               --name cosmetics-api \
               --restart unless-stopped \
-              -p 8000:8000 \
-              --env-file "$API_ENV_FILE" \
+              --network "$PROXY_NET" \
+              --env-file "$ENV_FILE" \
               "$IMAGE_REF"
+            # env-file 은 컨테이너 생성 시점에만 필요하다. 디스크에 시크릿을 남기지 않는다.
+            rm -f "$ENV_FILE"
+
+            # 이 앱 전용 server 블록만 공용 conf.d 에 배치한다(다른 앱 파일은 그대로).
+            # 도메인·인증서 경로는 고정값이며, nginx 런타임 변수($host 등)는 리터럴로
+            # 남기기 위해 \$ 로 이스케이프한다.
+            cat > "$NGINX_CONF_DIR/cosmetics-api.conf" <<'EOF'
+            server {
+              listen 8000 ssl;
+              server_name api.agentops.p-e.kr;
+
+              ssl_certificate /etc/letsencrypt/live/api.agentops.p-e.kr/fullchain.pem;
+              ssl_certificate_key /etc/letsencrypt/live/api.agentops.p-e.kr/privkey.pem;
+              ssl_protocols TLSv1.2 TLSv1.3;
+              ssl_prefer_server_ciphers on;
+
+              client_max_body_size 10m;
+
+              location / {
+                proxy_pass http://cosmetics-api:8000;
+                proxy_http_version 1.1;
+                proxy_set_header Host $host;
+                proxy_set_header X-Real-IP $remote_addr;
+                proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                proxy_set_header X-Forwarded-Proto $scheme;
+              }
+            }
+            EOF
+
+            # 공용 nginx 는 이 워크플로가 새로 띄우지 않는다. 이미 떠 있는 컨테이너의
+            # 설정을 검증한 뒤 무중단 reload 만 한다.
+            if ! docker ps --format '{{.Names}}' | grep -qx "$NGINX_CONTAINER"; then
+              echo "shared nginx container '$NGINX_CONTAINER' is not running; cannot reload" >&2
+              exit 1
+            fi
+            docker exec "$NGINX_CONTAINER" nginx -t \
+              && docker exec "$NGINX_CONTAINER" nginx -s reload
+
             docker image prune -f
         env:
           IMAGE_REF: ${{ steps.image.outputs.ref }}
           GHCR_USER: ${{ github.actor }}
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          API_ENV_FILE: ${{ vars.API_ENV_FILE || '/opt/cosmetics-analyzer/api.env' }}
+          # 운영 런타임 값: provider 선택은 Variables, 실제 키는 Secrets 로만 주입한다.
+          APP_LLM_PROVIDER: ${{ vars.LLM_PROVIDER }}
+          APP_OCR_PROVIDER: ${{ vars.OCR_PROVIDER }}
+          APP_CORS_ORIGINS: ${{ vars.CORS_ORIGINS }}
+          APP_LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
+          APP_OCR_API_KEY: ${{ secrets.OCR_API_KEY }}

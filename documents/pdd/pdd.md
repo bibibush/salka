@@ -85,7 +85,7 @@
 
 - Mobile: EAS Build / Submit
 - Web: AWS S3(정적 호스팅) + CloudFront(edge/CDN) [R5-CD1 결정, 2026-07-18]
-- Backend: Docker 컨테이너 → GHCR push 후 자체 서버 SSH pull/run [R5-CD1 결정, 2026-07-18]
+- Backend: Docker 컨테이너 → GHCR push 후 자체 서버 SSH pull/run. 서버의 **공용 nginx**(reverse proxy, `listen 8000 ssl`, `api.agentops.p-e.kr`)에 이 앱 전용 server 블록만 추가하고 무중단 reload. 백엔드는 `proxy_net` 내부에서만 도달하고 공개 노출은 nginx(8000/SSL)가 담당 [R5-CD1 결정, 2026-07-18]
 
 ---
 
