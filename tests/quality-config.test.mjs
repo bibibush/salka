@@ -114,13 +114,31 @@ test('CI triggers on pull requests and main push, and scopes push changes to the
   assert.match(workflow, /base:\s*\$\{\{\s*github\.event\.before\s*\}\}/);
 });
 
-test('unfinished Mobile CD remains manual until R5-CD2 credentials are ready', async () => {
+test('Mobile CD wires the main-push EAS pipeline behind a feature flag [R5-CD2]', async () => {
   const workflow = await readFile(new URL('.github/workflows/mobile-cd.yml', rootUrl), 'utf8');
   const triggerBlock = workflow.match(/^on:\r?\n([\s\S]*?)\r?\n\r?\nconcurrency:/m)?.[1];
 
   assert.ok(triggerBlock, 'Mobile CD trigger block not found');
+  assert.doesNotMatch(workflow, /DRAFT|초안/);
+  // main push + 수동 실행 두 트리거를 모두 지원한다.
+  assert.match(triggerBlock, /^  push:/m);
+  assert.match(triggerBlock, /branches:\s*\[main\]/);
   assert.match(triggerBlock, /^  workflow_dispatch:/m);
-  assert.doesNotMatch(triggerBlock, /^  push:/m);
+  // push diff 는 기본 브랜치 merge-base 가 아니라 직전 커밋 대비로 감지한다(항상 skip 방지).
+  assert.match(workflow, /base:\s*\$\{\{\s*github\.event\.before\s*\}\}/);
+
+  // 자격증명/projectId 준비 전에는 push 가 실제 배포하지 않도록 기능 플래그로 gate 한다.
+  // (플래그 미설정 시 push 는 action=none 으로 안전하게 no-op → main push 가 실패하지 않는다.)
+  assert.match(workflow, /vars\.MOBILE_CD_ENABLED/);
+
+  // 네이티브 변경 여부로 스토어 빌드/제출 vs OTA 를 분기한다.
+  assert.match(workflow, /eas build .*--profile production/);
+  assert.match(workflow, /eas submit .*--profile production/);
+  assert.match(workflow, /eas update --branch production/);
+
+  // EAS 인증은 시크릿 참조로만, 백엔드 URL 은 변수로 주입한다(literal 값 금지).
+  assert.match(workflow, /secrets\.EXPO_TOKEN/);
+  assert.match(workflow, /vars\.EXPO_PUBLIC_API_BASE_URL/);
 });
 
 test('Web CD deploys the static build to S3 + CloudFront on main push [R5-CD1]', async () => {

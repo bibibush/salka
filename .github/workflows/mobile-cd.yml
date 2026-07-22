@@ -1,8 +1,8 @@
 # =============================================================================
-# (B) 모바일 CD — EAS [R5-CD2 초안 / MANUAL ONLY]
+# (B) 모바일 CD — EAS [R5-CD2]
 # -----------------------------------------------------------------------------
-# R5-CD2에서 자격증명과 projectId를 설정한 뒤 main push 트리거를 활성화한다.
-# 활성화 후 모바일 관련 변경이 있으면 네이티브 변경 여부에 따라 분기:
+# main push + 수동 실행(workflow_dispatch) 두 트리거를 지원한다. 모바일 관련
+# 변경이 있으면 네이티브 변경 여부에 따라 분기:
 #   - 네이티브 변경 O → eas build + submit (스토어, 심사 경로)
 #   - 네이티브 변경 X → eas update       (OTA, JS/에셋 즉시 배포)
 #   - 모바일 무관 변경  → 아무것도 안 함
@@ -14,9 +14,16 @@
 # auto + 수동 실행은 안전하게 OTA 로 처리한다(수동 diff 기준 부재).
 #
 # -----------------------------------------------------------------------------
+# [활성화(feature flag)] main push 배포는 Variable `MOBILE_CD_ENABLED == 'true'`
+# 일 때만 실제로 동작한다. 플래그 미설정 시 push 는 action=none 으로 안전하게
+# no-op 하므로, 자격증명/projectId 준비 전에도 main push 가 실패하지 않는다.
+# 준비가 끝나면 이 변수만 켜면 활성화되고 워크플로 코드 변경은 불필요하다.
+# (수동 workflow_dispatch 는 명시적 실행이므로 플래그와 무관하게 항상 동작한다.)
+#
 # 사용자가 GitHub 에 사전 등록해야 하는 값 (참조만):
 #   [Secrets]   EXPO_TOKEN                (필수) Expo 액세스 토큰
 #   [Variables] EXPO_PUBLIC_API_BASE_URL  프로덕션 백엔드 베이스 URL
+#   [Variables] MOBILE_CD_ENABLED         'true' 로 두면 main push 배포 활성화
 # 스토어 제출 자격증명(App Store Connect API Key / Google Play 서비스 계정 JSON)
 # 및 코드사이닝은 EAS remote credentials(권장) 로 관리하며, `eas init`(projectId)
 # 은 사용자가 최초 1회 수행해야 한다. 미설정 시 build/submit 은 실패한다.
@@ -24,6 +31,8 @@
 name: Mobile CD (EAS)
 
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
     inputs:
       mode:
@@ -99,6 +108,13 @@ jobs:
           EVENT="${{ github.event_name }}"
           AFFECTED="${{ needs.changes.outputs.mobile_affected }}"
           NATIVE="${{ needs.changes.outputs.native }}"
+
+          # [feature flag] main push 배포는 vars.MOBILE_CD_ENABLED == 'true' 일 때만 동작한다.
+          # 자격증명/projectId 준비 전에는 플래그 미설정 → action=none 으로 안전하게 no-op
+          # (main push 가 실패하지 않는다). 수동 실행(workflow_dispatch)은 플래그와 무관하다.
+          if [ "$EVENT" = "push" ] && [ "${{ vars.MOBILE_CD_ENABLED }}" != "true" ]; then
+            echo "action=none" >> "$GITHUB_OUTPUT"; exit 0;
+          fi
 
           if [ "$MODE" = "build-submit" ]; then echo "action=build-submit" >> "$GITHUB_OUTPUT"; exit 0; fi
           if [ "$MODE" = "ota" ]; then echo "action=ota" >> "$GITHUB_OUTPUT"; exit 0; fi
