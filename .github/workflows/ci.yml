@@ -5,7 +5,7 @@
 #   - 특정 앱(apps/web | apps/mobile | apps/api)만 변경 → 해당 앱 job 만 실행
 #   - 루트 파일 또는 packages/** 변경(shared) → 모든 앱 + packages 전체 실행
 #
-# 트리거: PR(모든 대상) + prod 브랜치 push.
+# 트리거: PR(모든 대상) + main 브랜치 push.
 # 변경 경로 감지는 dorny/paths-filter 로 한 곳(changes job)에서 관리한다.
 #
 # React Hooks/Refresh 규칙은 ESLint 10 호환 버전을 적용한다. eslint-plugin-react는
@@ -17,7 +17,7 @@ name: CI
 on:
   pull_request:
   push:
-    branches: [prod]
+    branches: [main]
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
@@ -63,6 +63,10 @@ jobs:
         id: filter
         uses: dorny/paths-filter@v4
         with:
+          # push 에서는 직전 커밋 대비로 변경을 감지한다. base 미지정 시 기본 브랜치
+          # merge-base 기준이라, main push 에서 비교 대상이 자기 자신이 되어 모든 job 이
+          # skip 된다. (PR 이벤트에서는 이 값이 무시되고 PR base 브랜치가 사용된다.)
+          base: ${{ github.event.before }}
           filters: |
             shared:
               - 'package.json'

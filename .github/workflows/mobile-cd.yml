@@ -1,7 +1,7 @@
 # =============================================================================
 # (B) 모바일 CD — EAS [R5-CD2 초안 / MANUAL ONLY]
 # -----------------------------------------------------------------------------
-# R5-CD2에서 자격증명과 projectId를 설정한 뒤 prod push 트리거를 활성화한다.
+# R5-CD2에서 자격증명과 projectId를 설정한 뒤 main push 트리거를 활성화한다.
 # 활성화 후 모바일 관련 변경이 있으면 네이티브 변경 여부에 따라 분기:
 #   - 네이티브 변경 O → eas build + submit (스토어, 심사 경로)
 #   - 네이티브 변경 X → eas update       (OTA, JS/에셋 즉시 배포)
@@ -66,6 +66,9 @@ jobs:
       - id: filter
         uses: dorny/paths-filter@v4
         with:
+          # push 트리거 활성화(R5-CD2) 시 직전 커밋 대비로 변경을 감지한다. base 미지정 시
+          # 기본 브랜치 merge-base 기준이라, main push 에서 항상 "변경 없음"이 되어버린다.
+          base: ${{ github.event.before }}
           filters: |
             mobile_affected:
               - 'apps/mobile/**'

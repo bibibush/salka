@@ -7,7 +7,7 @@
 #   - apps/api 변경 또는 shared(루트 파일·packages/**) 변경 시에만 배포한다.
 #   - 그 외 변경(예: apps/web 만 변경)에는 아무것도 하지 않는다.
 #
-# 트리거: prod 브랜치 push + 수동 실행(workflow_dispatch).
+# 트리거: main 브랜치 push + 수동 실행(workflow_dispatch).
 #   - push  : 경로 diff 로 배포 여부를 결정한다.
 #   - manual: diff 기준이 없으므로 항상 배포한다.
 #
@@ -44,7 +44,7 @@ name: API CD (Docker + SSH)
 
 on:
   push:
-    branches: [prod]
+    branches: [main]
   workflow_dispatch:
 
 concurrency:
@@ -68,6 +68,10 @@ jobs:
       - id: filter
         uses: dorny/paths-filter@v4
         with:
+          # base 를 직전 커밋으로 고정한다: 이 push 가 실제로 바꾼 파일만 대상으로 본다.
+          # (미지정 시 기본 브랜치의 merge-base 기준이라, 트리거 브랜치가 곧 기본 브랜치이면
+          #  비교 대상이 자기 자신이 되어 "변경 없음"으로 항상 skip 된다.)
+          base: ${{ github.event.before }}
           filters: |
             api:
               - 'apps/api/**'

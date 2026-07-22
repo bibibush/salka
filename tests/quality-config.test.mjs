@@ -102,25 +102,40 @@ test('CI runs repository quality-config tests and is no longer marked as a draft
   assert.match(workflow, /pnpm test:quality/);
 });
 
+test('CI triggers on pull requests and main push, and scopes push changes to the push diff', async () => {
+  const workflow = await readFile(new URL('.github/workflows/ci.yml', rootUrl), 'utf8');
+  const triggerBlock = workflow.match(/^on:\r?\n([\s\S]*?)\r?\n\r?\nconcurrency:/m)?.[1];
+
+  assert.ok(triggerBlock, 'CI trigger block not found');
+  assert.match(triggerBlock, /^  pull_request:/m);
+  assert.match(triggerBlock, /^  push:/m);
+  assert.match(triggerBlock, /branches:\s*\[main\]/);
+  // push 는 기본 브랜치 merge-base 가 아니라 직전 커밋 대비로 변경을 감지해야 한다.
+  assert.match(workflow, /base:\s*\$\{\{\s*github\.event\.before\s*\}\}/);
+});
+
 test('unfinished Mobile CD remains manual until R5-CD2 credentials are ready', async () => {
   const workflow = await readFile(new URL('.github/workflows/mobile-cd.yml', rootUrl), 'utf8');
-  const triggerBlock = workflow.match(/^on:\n([\s\S]*?)\n\nconcurrency:/m)?.[1];
+  const triggerBlock = workflow.match(/^on:\r?\n([\s\S]*?)\r?\n\r?\nconcurrency:/m)?.[1];
 
   assert.ok(triggerBlock, 'Mobile CD trigger block not found');
   assert.match(triggerBlock, /^  workflow_dispatch:/m);
   assert.doesNotMatch(triggerBlock, /^  push:/m);
 });
 
-test('Web CD deploys the static build to S3 + CloudFront on prod push [R5-CD1]', async () => {
+test('Web CD deploys the static build to S3 + CloudFront on main push [R5-CD1]', async () => {
   const workflow = await readFile(new URL('.github/workflows/web-cd.yml', rootUrl), 'utf8');
-  const triggerBlock = workflow.match(/^on:\n([\s\S]*?)\n\nconcurrency:/m)?.[1];
+  const triggerBlock = workflow.match(/^on:\r?\n([\s\S]*?)\r?\n\r?\nconcurrency:/m)?.[1];
 
   assert.ok(triggerBlock, 'Web CD trigger block not found');
   assert.doesNotMatch(workflow, /DRAFT|초안/);
-  // prod push + 수동 실행 두 트리거 모두 지원
+  // main push + 수동 실행 두 트리거 모두 지원
   assert.match(triggerBlock, /^  push:/m);
-  assert.match(triggerBlock, /branches:\s*\[prod\]/);
+  assert.match(triggerBlock, /branches:\s*\[main\]/);
   assert.match(triggerBlock, /^  workflow_dispatch:/m);
+  // paths-filter 는 이번 push 로 실제 바뀐 것(직전 커밋 대비)만 배포 대상으로 본다.
+  // (base 미지정 시 기본 브랜치 merge-base 기준이라 항상 "변경 없음"으로 skip 된다.)
+  assert.match(workflow, /base:\s*\$\{\{\s*github\.event\.before\s*\}\}/);
   // 정적 빌드 → S3 sync → CloudFront 무효화
   assert.match(workflow, /turbo run build --filter=web/);
   assert.match(workflow, /aws s3 sync/);
@@ -132,15 +147,17 @@ test('Web CD deploys the static build to S3 + CloudFront on prod push [R5-CD1]',
   assert.match(workflow, /vars\.CLOUDFRONT_DISTRIBUTION_ID/);
 });
 
-test('API CD builds a Docker image and deploys it over SSH on prod push [R5-CD1]', async () => {
+test('API CD builds a Docker image and deploys it over SSH on main push [R5-CD1]', async () => {
   const workflow = await readFile(new URL('.github/workflows/api-cd.yml', rootUrl), 'utf8');
-  const triggerBlock = workflow.match(/^on:\n([\s\S]*?)\n\nconcurrency:/m)?.[1];
+  const triggerBlock = workflow.match(/^on:\r?\n([\s\S]*?)\r?\n\r?\nconcurrency:/m)?.[1];
 
   assert.ok(triggerBlock, 'API CD trigger block not found');
   assert.doesNotMatch(workflow, /DRAFT|초안/);
   assert.match(triggerBlock, /^  push:/m);
-  assert.match(triggerBlock, /branches:\s*\[prod\]/);
+  assert.match(triggerBlock, /branches:\s*\[main\]/);
   assert.match(triggerBlock, /^  workflow_dispatch:/m);
+  // paths-filter 는 이번 push 로 실제 바뀐 것(직전 커밋 대비)만 배포 대상으로 본다.
+  assert.match(workflow, /base:\s*\$\{\{\s*github\.event\.before\s*\}\}/);
   // 이미지 빌드/푸시 + SSH 배포
   assert.match(workflow, /docker\/build-push-action/);
   assert.match(workflow, /appleboy\/ssh-action/);
